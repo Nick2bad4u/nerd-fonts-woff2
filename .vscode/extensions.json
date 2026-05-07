@@ -28,7 +28,8 @@
         "xyz.local-history",
         "automatalabs.copilot-mcp",
         "kevinkyang.auto-comment-blocks",
-        "edwinhuish.better-comments-next"
+        "edwinhuish.better-comments-next",
+        "stxr.iconfont-preview"
     ],
     "unwantedRecommendations": []
 }
