@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an enhancement for gh-runs-cleanup
+title: "[Feature]: "
+labels:
+    - enhancement
+body:
+    - type: textarea
+      id: problem
+      attributes:
+          label: Problem statement
+          description: What workflow problem are you trying to solve?
+      validations:
+          required: true
+
+    - type: textarea
+      id: proposed
+      attributes:
+          label: Proposed solution
+          description: Describe the command UX and expected output.
+      validations:
+          required: true
+
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: Alternatives considered
+
+    - type: textarea
+      id: extra
+      attributes:
+          label: Additional context

@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+        />
+        <title>gh-runs-cleanup</title>
+        <meta
+            name="description"
+            content="A GitHub CLI extension for safely cleaning up GitHub Actions workflow runs with filters, dry-run support, retry handling, and JSON output."
+        />
+        <meta
+            name="theme-color"
+            content="#07111f"
+        />
+        <meta
+            property="og:type"
+            content="website"
+        />
+        <meta
+            property="og:title"
+            content="gh-runs-cleanup"
+        />
+        <meta
+            property="og:description"
+            content="Safely clean up GitHub Actions workflow runs with dry-run previews, explicit confirmation, filters, retries, and JSON output."
+        />
+        <meta
+            property="og:url"
+            content="https://nick2bad4u.github.io/gh-runs-cleanup/"
+        />
+        <meta
+            property="og:site_name"
+            content="gh-runs-cleanup"
+        />
+        <meta
+            property="og:image"
+            content="https://nick2bad4u.github.io/gh-runs-cleanup/social-card.svg"
+        />
+        <meta
+            property="og:image:alt"
+            content="gh-runs-cleanup GitHub CLI extension social preview"
+        />
+        <meta
+            name="twitter:card"
+            content="summary_large_image"
+        />
+        <meta
+            name="twitter:title"
+            content="gh-runs-cleanup"
+        />
+        <meta
+            name="twitter:description"
+            content="Safely bulk-delete GitHub Actions workflow runs with dry-run previews, filters, retries, and JSON output."
+        />
+        <meta
+            name="twitter:image"
+            content="https://nick2bad4u.github.io/gh-runs-cleanup/social-card.svg"
+        />
+        <link
+            rel="canonical"
+            href="https://nick2bad4u.github.io/gh-runs-cleanup/"
+        />
+        <link
+            rel="icon"
+            href="./logo.svg"
+            type="image/svg+xml"
+        />
+        <link
+            rel="preconnect"
+            href="https://www.nerdfonts.com"
+        />
+        <link
+            rel="stylesheet"
+            href="https://www.nerdfonts.com/assets/css/webfont.css"
+        />
+        <link
+            rel="stylesheet"
+            href="./styles.css"
+        />
+
+        <script>
+            (function (w, d, s, l, i) {
+                w[l] = w[l] || [];
+                w[l].push({
+                    "gtm.start": new Date().getTime(),
+                    event: "gtm.js",
+                });
+                var f = d.getElementsByTagName(s)[0],
+                    j = d.createElement(s),
+                    dl = l != "dataLayer" ? "&l=" + l : "";
+                j.async = true;
+                j.src = "https://www.googletagmanager.com/gtm.js?id=" + i + dl;
+                f.parentNode.insertBefore(j, f);
+            })(window, document, "script", "dataLayer", "GTM-T8J6HPLF");
+        </script>
+    </head>
+    <body>
+        <noscript>
+            <iframe
+                src="https://www.googletagmanager.com/ns.html?id=GTM-T8J6HPLF"
+                height="0"
+                width="0"
+                style="display: none; visibility: hidden"
+                title="Google Tag Manager"
+            ></iframe>
+        </noscript>
+
+        <div class="site-shell">
+            <header class="site-header">
+                <a
+                    class="brand"
+                    href="#top"
+                >
+                    <img
+                        src="./logo.svg"
+                        alt="gh-runs-cleanup logo"
+                        class="brand-logo"
+                    />
+                    <span class="brand-text"
+                        ><span class="nf nf-md-broom brand-icon"></span
+                        >gh-runs-cleanup</span
+                    >
+                </a>
+
+                <nav class="site-nav">
+                    <a href="#install">Install</a>
+                    <a href="#features">Features</a>
+                    <a href="#usage">Usage</a>
+                    <a href="#filters">Filters</a>
+                    <a href="#json">JSON</a>
+                </nav>
+
+                <div class="site-nav-actions">
+                    <a
+                        class="button ghost"
+                        href="https://github.com/Nick2bad4u/gh-runs-cleanup/releases"
+                    >
+                        <span class="nf nf-md-tag_outline"></span>
+                        Releases
+                    </a>
+                    <a
+                        class="button primary"
+                        href="https://github.com/Nick2bad4u/gh-runs-cleanup"
+                    >
+                        <span class="nf nf-md-github"></span>
+                        GitHub
+                    </a>
+                </div>
+            </header>
+
+            <main
+                class="page"
+                id="top"
+            >
+                <section class="hero">
+                    <div class="hero-copy">
+                        <p class="eyebrow">GitHub CLI extension</p>
+                        <h1
+                            >Clean up stale Actions runs without risky one-off
+                            scripts.</h1
+                        >
+                        <p class="lede">
+                            <code>gh-runs-cleanup</code> helps you safely
+                            bulk-delete GitHub Actions workflow runs with
+                            dry-run previews, explicit confirmation, filtering
+                            by workflow, branch, age, and status, plus retry
+                            handling and machine-readable JSON summaries.
+                        </p>
+
+                        <div class="hero-badges">
+                            <span class="hero-badge"
+                                ><span class="nf nf-md-shield_check"></span>Safe
+                                by default</span
+                            >
+                            <span class="hero-badge"
+                                ><span class="nf nf-md-code_json"></span>JSON
+                                summaries</span
+                            >
+                            <span class="hero-badge"
+                                ><span class="nf nf-md-reload_alert"></span
+                                >Retry-aware</span
+                            >
+                        </div>
+
+                        <div class="hero-actions">
+                            <a
+                                class="button primary"
+                                href="#install"
+                            >
+                                <span class="nf nf-md-rocket_launch"></span>
+                                Get started
+                            </a>
+                            <a
+                                class="button ghost"
+                                href="https://github.com/Nick2bad4u/gh-runs-cleanup"
+                            >
+                                <span class="nf nf-md-source_repository"></span>
+                                View repository
+                            </a>
+                        </div>
+
+                        <ul class="hero-points">
+                            <li
+                                >Safe by default with <code>--dry-run</code> and
+                                <code>--confirm</code></li
+                            >
+                            <li
+                                >Built for automation with
+                                <code>--json</code></li
+                            >
+                            <li
+                                >Works directly from source on modern
+                                Node.js</li
+                            >
+                        </ul>
+                    </div>
+
+                    <aside class="code-window hero-code-window">
+                        <div class="code-window-header">
+                            <div class="terminal-bar">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <div class="code-window-title">
+                                <span class="nf nf-cod-terminal"></span>
+                                quick-demo.sh
+                            </div>
+                            <button
+                                class="button code-copy-button"
+                                type="button"
+                                data-copy-text="gh extension install Nick2bad4u/gh-runs-cleanup&#10;gh runs-cleanup --repo owner/repo --dry-run&#10;gh runs-cleanup --repo owner/repo --before-days 30 --status failure --confirm"
+                            >
+                                <span class="nf nf-md-content_copy"></span>
+                                <span class="copy-button-label">Copy demo</span>
+                            </button>
+                        </div>
+                        <pre><code>$ gh extension install Nick2bad4u/gh-runs-cleanup
+    $ gh runs-cleanup --repo owner/repo --dry-run
+
+    Repo: owner/repo
+    Statuses: failure, cancelled
+    Matched runs: 184
+    Skipped by exclusion filters: 0
+    Skipped by age filter: 0
+    Dry run complete: no deletions performed.
+
+    $ gh runs-cleanup --repo owner/repo --before-days 30 --status failure --confirm
+
+    Attempted deletions: 77
+    Deleted: 77
+    Failed: 0</code></pre>
+                    </aside>
+                </section>
+
+                <section
+                    class="quickstart-grid"
+                    id="install"
+                >
+                    <article class="panel compact-panel">
+                        <p class="eyebrow">Install</p>
+                        <h2>Be productive in under a minute</h2>
+                        <p>
+                            Install the extension once, then use dry runs to
+                            preview cleanup safely before deleting anything.
+                        </p>
+                        <div class="code-window install-code-window">
+                            <div class="code-window-header code-window-actions">
+                                <div class="code-window-title">
+                                    <span class="nf nf-md-download"></span>
+                                    install
+                                </div>
+                                <button
+                                    class="button code-copy-button"
+                                    type="button"
+                                    data-copy-text="gh extension install Nick2bad4u/gh-runs-cleanup"
+                                >
+                                    <span class="nf nf-md-content_copy"></span>
+                                    <span class="copy-button-label"
+                                        >Copy install</span
+                                    >
+                                </button>
+                            </div>
+                            <pre><code>gh extension install Nick2bad4u/gh-runs-cleanup</code></pre>
+                        </div>
+                    </article>
+
+                    <article class="panel compact-panel requirements-panel">
+                        <p class="eyebrow">Requirements</p>
+                        <ul class="check-list">
+                            <li
+                                ><span class="nf nf-md-check_circle"></span
+                                ><code>gh</code> installed and authenticated</li
+                            >
+                            <li
+                                ><span class="nf nf-md-check_circle"></span
+                                >Node.js <code>&gt;= 22.18.0</code></li
+                            >
+                            <li
+                                ><span class="nf nf-md-check_circle"></span
+                                >Repository access with run deletion
+                                permissions</li
+                            >
+                        </ul>
+                        <div class="actions stack-on-mobile">
+                            <a
+                                class="button ghost"
+                                href="https://github.com/Nick2bad4u/gh-runs-cleanup/releases"
+                            >
+                                <span class="nf nf-md-open_in_new"></span>
+                                Latest release
+                            </a>
+                            <a
+                                class="button ghost"
+                                href="https://github.com/Nick2bad4u/gh-runs-cleanup#readme"
+                            >
+                                <span
+                                    class="nf nf-md-book_open_page_variant"
+                                ></span>
+                                Full README
+                            </a>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="stats-row">
+                    <article class="stat-card">
+                        <strong
+                            ><span class="nf nf-md-eye_outline"></span>Dry-run
+                            first</strong
+                        >
+                        <span>Preview everything before deletion.</span>
+                    </article>
+                    <article class="stat-card">
+                        <strong
+                            ><span class="nf nf-md-code_json"></span>Structured
+                            JSON</strong
+                        >
+                        <span
+                            >Perfect for scripts, bots, and scheduled
+                            jobs.</span
+                        >
+                    </article>
+                    <article class="stat-card">
+                        <strong
+                            ><span class="nf nf-md-cog_refresh"></span
+                            >Operational controls</strong
+                        >
+                        <span
+                            >Retries, fail-fast, max-failures, and
+                            exclusions.</span
+                        >
+                    </article>
+                </section>
+
+                <section
+                    class="section"
+                    id="features"
+                >
+                    <div class="section-heading">
+                        <p class="eyebrow">Features</p>
+                        <h2>Designed for safe cleanup at scale</h2>
+                    </div>
+
+                    <div class="feature-grid feature-grid-three">
+                        <article class="feature-card">
+                            <h3
+                                ><span class="nf nf-md-shield_check"></span
+                                >Explicit safety controls</h3
+                            >
+                            <p>
+                                No destructive action happens unless you opt in
+                                with
+                                <code>--confirm</code> or <code>--yes</code>.
+                            </p>
+                        </article>
+                        <article class="feature-card">
+                            <h3
+                                ><span class="nf nf-md-filter_cog"></span
+                                >Flexible filtering</h3
+                            >
+                            <p>
+                                Filter by workflow, branch, event, actor,
+                                commit, created date, age threshold, and run
+                                status.
+                            </p>
+                        </article>
+                        <article class="feature-card">
+                            <h3
+                                ><span class="nf nf-md-reload_alert"></span
+                                >Operational resilience</h3
+                            >
+                            <p>
+                                Retries with backoff, fail-fast, max-failures,
+                                ordering, and exclusion filters help avoid noisy
+                                cleanup runs.
+                            </p>
+                        </article>
+                        <article class="feature-card">
+                            <h3
+                                ><span class="nf nf-md-code_json"></span
+                                >Automation ready</h3
+                            >
+                            <p>
+                                Use <code>--json</code> for machine-readable
+                                summaries in scheduled workflows, scripts, or
+                                local tooling.
+                            </p>
+                        </article>
+                        <article class="feature-card">
+                            <h3
+                                ><span
+                                    class="nf nf-md-sort_clock_ascending_outline"
+                                ></span
+                                >Deterministic ordering</h3
+                            >
+                            <p>
+                                Process runs in <code>oldest</code>,
+                                <code>newest</code>, or <code>none</code> mode
+                                to match your retention strategy.
+                            </p>
+                        </article>
+                        <article class="feature-card">
+                            <h3
+                                ><span
+                                    class="nf nf-md-console_network_outline"
+                                ></span
+                                >Built for gh users</h3
+                            >
+                            <p>
+                                Works with existing <code>gh</code>
+                                authentication and repository context instead of
+                                requiring a separate service or config file.
+                            </p>
+                        </article>
+                    </div>
+                </section>
+
+                <section
+                    class="section section-split"
+                    id="usage"
+                >
+                    <div class="section-heading">
+                        <p class="eyebrow">Usage</p>
+                        <h2>Common cleanup workflows</h2>
+                    </div>
+
+                    <div class="split-grid">
+                        <div class="usage-grid">
+                            <article class="panel code-panel">
+                                <h3
+                                    ><span class="nf nf-md-eye_outline"></span
+                                    >Preview everything</h3
+                                >
+                                <div class="code-window">
+                                    <div class="code-window-header">
+                                        <div class="code-window-title"
+                                            >preview</div
+                                        >
+                                        <button
+                                            class="button code-copy-button"
+                                            type="button"
+                                            data-copy-text="gh runs-cleanup --repo owner/repo --dry-run"
+                                        >
+                                            <span
+                                                class="nf nf-md-content_copy"
+                                            ></span>
+                                            <span class="copy-button-label"
+                                                >Copy</span
+                                            >
+                                        </button>
+                                    </div>
+                                    <pre><code>gh runs-cleanup --repo owner/repo --dry-run</code></pre>
+                                </div>
+                            </article>
+
+                            <article class="panel code-panel">
+                                <h3
+                                    ><span class="nf nf-md-delete_sweep"></span
+                                    >Delete failed/cancelled runs</h3
+                                >
+                                <div class="code-window">
+                                    <div class="code-window-header">
+                                        <div class="code-window-title"
+                                            >default-cleanup</div
+                                        >
+                                        <button
+                                            class="button code-copy-button"
+                                            type="button"
+                                            data-copy-text="gh runs-cleanup --repo owner/repo --status failure,cancelled --confirm"
+                                        >
+                                            <span
+                                                class="nf nf-md-content_copy"
+                                            ></span>
+                                            <span class="copy-button-label"
+                                                >Copy</span
+                                            >
+                                        </button>
+                                    </div>
+                                    <pre><code>gh runs-cleanup --repo owner/repo --status failure,cancelled --confirm</code></pre>
+                                </div>
+                            </article>
+
+                            <article class="panel code-panel">
+                                <h3
+                                    ><span
+                                        class="nf nf-md-calendar_clock"
+                                    ></span
+                                    >Clean older failed runs only</h3
+                                >
+                                <div class="code-window">
+                                    <div class="code-window-header">
+                                        <div class="code-window-title"
+                                            >age-filtered</div
+                                        >
+                                        <button
+                                            class="button code-copy-button"
+                                            type="button"
+                                            data-copy-text="gh runs-cleanup --repo owner/repo --status failure --before-days 30 --confirm"
+                                        >
+                                            <span
+                                                class="nf nf-md-content_copy"
+                                            ></span>
+                                            <span class="copy-button-label"
+                                                >Copy</span
+                                            >
+                                        </button>
+                                    </div>
+                                    <pre><code>gh runs-cleanup --repo owner/repo --status failure --before-days 30 --confirm</code></pre>
+                                </div>
+                            </article>
+
+                            <article class="panel code-panel">
+                                <h3
+                                    ><span
+                                        class="nf nf-md-shield_lock_outline"
+                                    ></span
+                                    >Exclude critical workflows</h3
+                                >
+                                <div class="code-window">
+                                    <div class="code-window-header">
+                                        <div class="code-window-title"
+                                            >protected-pipelines</div
+                                        >
+                                        <button
+                                            class="button code-copy-button"
+                                            type="button"
+                                            data-copy-text="gh runs-cleanup --repo owner/repo --all-statuses --exclude-workflow CI,Release --dry-run"
+                                        >
+                                            <span
+                                                class="nf nf-md-content_copy"
+                                            ></span>
+                                            <span class="copy-button-label"
+                                                >Copy</span
+                                            >
+                                        </button>
+                                    </div>
+                                    <pre><code>gh runs-cleanup --repo owner/repo --all-statuses --exclude-workflow CI,Release --dry-run</code></pre>
+                                </div>
+                            </article>
+                        </div>
+
+                        <article
+                            class="panel reference-panel"
+                            id="filters"
+                        >
+                            <p class="eyebrow">Filters & controls</p>
+                            <h3>Control what gets touched</h3>
+                            <div class="table-panel compact-table-panel">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Category</th>
+                                            <th>Options</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Repository</td>
+                                            <td><code>--repo</code></td>
+                                        </tr>
+                                        <tr>
+                                            <td>Workflow selection</td>
+                                            <td
+                                                ><code>--workflow</code>,
+                                                <code
+                                                    >--exclude-workflow</code
+                                                ></td
+                                            >
+                                        </tr>
+                                        <tr>
+                                            <td>Branch selection</td>
+                                            <td
+                                                ><code>--branch</code>,
+                                                <code
+                                                    >--exclude-branch</code
+                                                ></td
+                                            >
+                                        </tr>
+                                        <tr>
+                                            <td>Status & age</td>
+                                            <td
+                                                ><code>--status</code>,
+                                                <code>--all-statuses</code>,
+                                                <code>--before-days</code>,
+                                                <code>--created</code></td
+                                            >
+                                        </tr>
+                                        <tr>
+                                            <td>Execution controls</td>
+                                            <td
+                                                ><code>--max-delete</code>,
+                                                <code>--order</code>,
+                                                <code>--max-retries</code>,
+                                                <code>--retry-delay-ms</code>,
+                                                <code>--fail-fast</code>,
+                                                <code>--max-failures</code></td
+                                            >
+                                        </tr>
+                                        <tr>
+                                            <td>Output</td>
+                                            <td
+                                                ><code>--verbose</code>,
+                                                <code>--quiet</code>,
+                                                <code>--json</code></td
+                                            >
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <section
+                    class="section"
+                    id="json"
+                >
+                    <div class="section-heading">
+                        <p class="eyebrow">JSON mode</p>
+                        <h2>Machine-readable output for jobs and scripts</h2>
+                    </div>
+
+                    <div class="two-column compact-two-column">
+                        <article class="panel code-panel">
+                            <div class="code-window">
+                                <div class="code-window-header">
+                                    <div class="code-window-title">
+                                        <span class="nf nf-md-console"></span>
+                                        json-command
+                                    </div>
+                                    <button
+                                        class="button code-copy-button"
+                                        type="button"
+                                        data-copy-text="gh runs-cleanup --repo owner/repo --status failure --before-days 14 --dry-run --json"
+                                    >
+                                        <span
+                                            class="nf nf-md-content_copy"
+                                        ></span>
+                                        <span class="copy-button-label"
+                                            >Copy</span
+                                        >
+                                    </button>
+                                </div>
+                                <pre><code>gh runs-cleanup \
+  --repo owner/repo \
+  --status failure \
+  --before-days 14 \
+  --dry-run \
+  --json</code></pre>
+                            </div>
+                        </article>
+
+                        <article class="panel json-panel code-panel">
+                            <div class="code-window">
+                                <div class="code-window-header">
+                                    <div class="code-window-title">
+                                        <span class="nf nf-md-code_json"></span>
+                                        summary.json
+                                    </div>
+                                    <button
+                                        class="button code-copy-button"
+                                        type="button"
+                                        data-copy-text='{&#10;  "attempted": 0,&#10;  "deleted": 0,&#10;  "dryRun": true,&#10;  "durationMs": 112,&#10;  "failed": 0,&#10;  "failedIds": [],&#10;  "matched": 42,&#10;  "repo": "owner/repo",&#10;  "skippedByExclusion": 3,&#10;  "statuses": ["failure"],&#10;  "skippedByAge": 19&#10;}'
+                                    >
+                                        <span
+                                            class="nf nf-md-content_copy"
+                                        ></span>
+                                        <span class="copy-button-label"
+                                            >Copy</span
+                                        >
+                                    </button>
+                                </div>
+                                <pre><code>{
+      "attempted": 0,
+      "deleted": 0,
+      "dryRun": true,
+      "durationMs": 112,
+      "failed": 0,
+      "failedIds": [],
+      "matched": 42,
+      "repo": "owner/repo",
+      "skippedByExclusion": 3,
+      "statuses": ["failure"],
+      "skippedByAge": 19
+    }</code></pre>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="section cta-section">
+                    <div class="cta-card">
+                        <h2>Ready to clean up your Actions history?</h2>
+                        <p>
+                            Start with a dry run, confirm only what you want to
+                            remove, and automate the rest with JSON output and
+                            scheduled jobs.
+                        </p>
+                        <div class="hero-actions">
+                            <a
+                                class="button primary"
+                                href="https://github.com/Nick2bad4u/gh-runs-cleanup"
+                            >
+                                <span class="nf nf-md-github"></span>
+                                Open repository
+                            </a>
+                            <a
+                                class="button ghost"
+                                href="https://github.com/Nick2bad4u/gh-runs-cleanup/issues"
+                            >
+                                <span class="nf nf-md-bug_outline"></span>
+                                Report an issue
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            <footer class="site-footer">
+                <p
+                    >gh-runs-cleanup • GitHub CLI extension • Built for safe
+                    workflow run cleanup</p
+                >
+            </footer>
+        </div>
+        <script>
+            for (const button of document.querySelectorAll(
+                "[data-copy-text]"
+            )) {
+                button.addEventListener("click", async () => {
+                    const text = button.getAttribute("data-copy-text") || "";
+                    const label = button.querySelector(".copy-button-label");
+                    const originalLabel = label?.textContent || "Copy install";
+
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        if (label) {
+                            label.textContent = "Copied";
+                        }
+                        button.classList.add("copied");
+                    } catch {
+                        if (label) {
+                            label.textContent = "Copy failed";
+                        }
+                    }
+
+                    window.setTimeout(() => {
+                        if (label) {
+                            label.textContent = originalLabel;
+                        }
+                        button.classList.remove("copied");
+                    }, 1800);
+                });
+            }
+        </script>
+    </body>
+</html>

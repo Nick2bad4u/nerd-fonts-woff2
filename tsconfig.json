@@ -1,0 +1,90 @@
+{
+    "$schema": "https://www.schemastore.org/tsconfig.json",
+    "compilerOptions": {
+        "allowJs": false,
+        "allowSyntheticDefaultImports": true,
+        "alwaysStrict": true,
+        "assumeChangesOnlyAffectDirectDependencies": true,
+        "checkJs": false,
+        "declaration": false,
+        "declarationMap": false,
+        "diagnostics": false,
+        "esModuleInterop": true,
+        "exactOptionalPropertyTypes": true,
+        "forceConsistentCasingInFileNames": true,
+        "incremental": true,
+        "inlineSourceMap": false,
+        "inlineSources": false,
+        "isolatedModules": true,
+        "lib": [
+            "ESNext"
+        ],
+        "module": "NodeNext",
+        "moduleDetection": "force",
+        "moduleResolution": "NodeNext",
+        "newLine": "crlf",
+        "noCheck": false,
+        "noEmit": false,
+        "noEmitHelpers": false,
+        "noEmitOnError": true,
+        "noErrorTruncation": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitAny": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noUncheckedIndexedAccess": true,
+        "noUncheckedSideEffectImports": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "outDir": "./dist",
+        "preserveWatchOutput": false,
+        "pretty": true,
+        "removeComments": false,
+        "resolveJsonModule": true,
+        "resolvePackageJsonExports": true,
+        "resolvePackageJsonImports": true,
+        "rewriteRelativeImportExtensions": false,
+        "rootDir": ".",
+        "skipLibCheck": true,
+        "sourceMap": true,
+        "strict": true,
+        "strictBindCallApply": true,
+        "strictBuiltinIteratorReturn": true,
+        "strictFunctionTypes": true,
+        "strictNullChecks": true,
+        "strictPropertyInitialization": true,
+        "target": "ES2024",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo/tsconfig.app.tsbuildinfo",
+        "types": [
+            "node"
+        ],
+        "useUnknownInCatchVariables": true,
+        "verbatimModuleSyntax": true
+    },
+    "exclude": [
+        ".cache/**",
+        "coverage/**",
+        "dist/**",
+        "node_modules/**"
+    ],
+    "include": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+    ],
+    "watchOptions": {
+        "excludeDirectories": [
+            "**/node_modules",
+            ".cache",
+            ".git",
+            ".vscode",
+            "dist/*",
+            "temp/*"
+        ],
+        "fallbackPolling": "dynamicPriority",
+        "synchronousWatchDirectory": true,
+        "watchDirectory": "useFsEvents",
+        "watchFile": "useFsEvents"
+    }
+}

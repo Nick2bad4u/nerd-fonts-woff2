@@ -1,0 +1,74 @@
+{
+    "$schema": "vscode://schemas/settings/workspace",
+    "[markdown]": {
+        "editor.defaultFormatter": "unifiedjs.vscode-remark",
+        "editor.formatOnSave": true
+    },
+    "css.customData": [],
+    "css.lint.importStatement": "ignore",
+    "css.lint.unknownAtRules": "ignore",
+    "css.validate": false,
+    "editor.gotoLocation.alternativeImplementationCommand": "editor.action.goToReferences",
+    "editor.gotoLocation.alternativeReferenceCommand": "editor.action.peekDefinition",
+    "editor.suggest.showStatusBar": true,
+    "eslint.ignoreUntitled": true,
+    "eslint.validate": [
+        "javascript",
+        "javascriptreact",
+        "typescript",
+        "typescriptreact",
+        "json",
+        "jsonc",
+        "json5",
+        "yaml",
+        "yml",
+        "markdown",
+        "html",
+        "css",
+        "scss",
+        "less",
+        "toml",
+        "github-actions-workflow",
+        "vue",
+        "svelte",
+        "astro",
+        "handlebars",
+        "plaintext",
+        "vue-html",
+        "vue-component",
+        "vue-ts",
+        "vue-tsx",
+        "vue-html",
+        "vue-component",
+        "vue-ts",
+        "tailwindcss"
+    ],
+    "eslint.workingDirectories": [
+        "."
+    ],
+    "markdown.validate.ignoredLinks": [
+        "*-Nick2bad4u",
+        "#a11y-Nick2bad4u"
+    ],
+    "markdownlint.config": {
+        "extends": ".remarkrc.mjs"
+    },
+    "remark.format": {
+        "settings": {
+            "bullet": "-",
+            "emphasis": "_",
+            "strong": "*"
+        }
+    },
+    "sonarlint.connectedMode.project": {
+        "connectionId": "nick2bad4u",
+        "projectKey": "Nick2bad4u_Uptime-Watcher"
+    },
+    "sonarlint.pathsToExclude": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/coverage/**"
+    ],
+    "strykerMutator.enable": false,
+    "vitest.rootConfig": "vite.config.ts"
+}
