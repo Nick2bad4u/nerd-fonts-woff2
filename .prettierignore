@@ -1,0 +1,49 @@
+# Ignore libs folder recursively
+libs/
+
+# Ignore node_modules
+node_modules/
+
+# Ignore other common folders that shouldn't be formatted
+build/
+coverage/
+*.min.js
+*.min.css
+dist/
+docs/docusaurus/docs/
+docs/docusaurus/build/
+docs/docusaurus/.docusaurus/
+docs/packages/
+docs/TSDoc/
+docs/Guides/
+
+# MD and MDX files since we use Remark Lint and other tools for those
+**/*.md
+**/*.mdx
+
+# Ignore Change Logs
+**/CHANGELOG.md
+
+# Ignore package in electron-app
+electron-app/package.json
+electron-app/package-lock.json
+
+
+# Ignore specific files
+**/coverage-results.json
+
+# Ignore prompts (Changed " to ' for tools messes up agents)
+**/**.prompt.md
+**/**.prompt-copy.md
+**/**.prompt.**.md
+**/**.chatmode.md
+**/**.agent.md
+
+# Ignore Sonar properties (not compatible with prettier-ini parser)
+sonar-project.properties
+
+# covered by remark lint / remark
+.gitleaks.toml
+.taplo.toml
+cliff.toml
+lychee.toml

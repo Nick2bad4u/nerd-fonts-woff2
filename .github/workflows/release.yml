@@ -1,0 +1,316 @@
+# Release the GH extension and create the matching GitHub release.
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+name: Release
+
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Manual release ({0}) by @{1}', inputs.version || inputs.release_type, github.actor) || format('Tagged release {0} by @{1}', github.ref_name, github.actor) }}
+
+concurrency:
+    group: "${{ github.workflow }}-${{ github.repository }}"
+    cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+on:
+    push:
+        tags:
+            - "v*"
+    workflow_dispatch:
+        inputs:
+            release_type:
+                description: "Release bump type"
+                required: true
+                default: patch
+                type: choice
+                options:
+                    - patch
+                    - minor
+                    - major
+            version:
+                description: "Explicit release version in x.y.z format (overrides release_type)"
+                required: false
+                type: string
+            ref:
+                description: "Branch to release from when running manually"
+                required: false
+                default: main
+                type: string
+            skip_verify:
+                description: "Skip release verification (manual dispatch only; use with caution)"
+                required: false
+                default: false
+                type: boolean
+
+defaults:
+    run:
+        shell: bash
+
+jobs:
+    publish:
+        name: Create GitHub release
+        if: ${{ github.event_name != 'push' || github.actor != 'github-actions[bot]' }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 60
+        outputs:
+            package_name: ${{ steps.version.outputs.package_name }}
+            version: ${{ steps.version.outputs.version }}
+            tag: ${{ steps.version.outputs.tag }}
+            github_release_url: ${{ steps.version.outputs.github_release_url }}
+        permissions:
+            contents: write
+        env:
+            CI: "true"
+            DEFAULT_RELEASE_BRANCH: "main"
+            RELEASE_NOTES_PATH: temp/release-notes.md
+        concurrency:
+            group: release-pipeline
+            cancel-in-progress: false
+
+        steps:
+            - name: Harden the runner (Audit all outbound calls)
+              uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+              with:
+                  egress-policy: audit
+
+            - name: Resolve target ref
+              id: target_ref
+              env:
+                  WORKFLOW_DISPATCH_REF: ${{ inputs.ref }}
+              run: |
+                  set -euo pipefail
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    branch="${WORKFLOW_DISPATCH_REF:-}"
+                    if [ -z "$branch" ]; then
+                      branch="${DEFAULT_RELEASE_BRANCH}"
+                    fi
+                    branch="${branch#refs/heads/}"
+                    if [[ "$branch" == refs/tags/* ]]; then
+                      echo "workflow_dispatch ref must be a branch, not a tag: $branch" >&2
+                      exit 1
+                    fi
+                    echo "ref=$branch" >> "$GITHUB_OUTPUT"
+                    echo "branch=$branch" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
+                    echo "branch=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Checkout repository
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  fetch-depth: 0
+                  fetch-tags: true
+                  ref: ${{ steps.target_ref.outputs.ref }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Setup Node.js
+              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+              with:
+                  node-version-file: .node-version
+                  cache: npm
+                  cache-dependency-path: package-lock.json
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Configure Git for release automation
+              if: github.event_name == 'workflow_dispatch'
+              run: |
+                  set -euo pipefail
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git fetch --tags --force
+
+            - name: Validate workflow_dispatch release input
+              if: github.event_name == 'workflow_dispatch'
+              env:
+                  EXPLICIT_VERSION: ${{ inputs.version }}
+                  RELEASE_TYPE: ${{ inputs.release_type }}
+              run: |
+                  set -euo pipefail
+                  explicit_version="${EXPLICIT_VERSION:-}"
+                  if [ -n "$explicit_version" ]; then
+                    if [[ ! "$explicit_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                      echo "Invalid version input '$explicit_version'. Use x.y.z format." >&2
+                      exit 1
+                    fi
+                    exit 0
+                  fi
+
+                  release_type="${RELEASE_TYPE:-patch}"
+                  case "$release_type" in
+                    patch|minor|major)
+                      exit 0
+                      ;;
+                    *)
+                      echo "Invalid release_type '$release_type'. Allowed: patch, minor, major." >&2
+                      exit 1
+                      ;;
+                  esac
+
+            - name: Validate tag matches package version
+              if: startsWith(github.ref, 'refs/tags/v')
+              run: |
+                  set -euo pipefail
+                  TAG_VERSION="${GITHUB_REF_NAME#v}"
+                  PACKAGE_VERSION=$(node -p "require('./package.json').version")
+                  if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+                    echo "Tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)." >&2
+                    exit 1
+                  fi
+
+            - name: Warn when verification is skipped
+              if: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_verify }}
+              run: |
+                  echo "::warning::Skipping 'release:check' because workflow_dispatch input 'skip_verify' is true."
+                  echo "::warning::Use this only when release checks were validated locally before dispatch."
+
+            - name: Verify release
+              if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_verify }}
+              run: npm run release:check
+
+            - name: Ensure verification did not modify tracked files
+              if: startsWith(github.ref, 'refs/tags/v')
+              run: |
+                  set -euo pipefail
+                  if ! git diff --quiet || ! git diff --cached --quiet; then
+                    echo "release:check modified files on a tag-triggered release. Ensure the branch is clean before tagging." >&2
+                    git status --short
+                    exit 1
+                  fi
+
+            - name: Determine release version
+              id: version
+              env:
+                  EXPLICIT_VERSION: ${{ inputs.version }}
+                  RELEASE_TYPE: ${{ inputs.release_type }}
+              run: |
+                  set -euo pipefail
+
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    explicit_version="${EXPLICIT_VERSION:-}"
+                    if [ -n "$explicit_version" ]; then
+                      npm version "$explicit_version" --no-git-tag-version
+                      version="$explicit_version"
+                    else
+                      release_type="${RELEASE_TYPE:-patch}"
+                      npm version "$release_type" --no-git-tag-version
+                      version=$(node -p "require('./package.json').version")
+                    fi
+                  else
+                    tag="${GITHUB_REF_NAME}"
+                    version="${tag#v}"
+                  fi
+
+                  package_name=$(node -p "require('./package.json').name")
+                  tag="v${version}"
+                  github_release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${tag}"
+
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
+                  echo "package_name=$package_name" >> "$GITHUB_OUTPUT"
+                  echo "github_release_url=$github_release_url" >> "$GITHUB_OUTPUT"
+
+            - name: Rebuild after manual version bump
+              if: github.event_name == 'workflow_dispatch'
+              run: npm run build
+
+            - name: Commit and push release version + tag
+              if: github.event_name == 'workflow_dispatch'
+              env:
+                  BRANCH: ${{ steps.target_ref.outputs.branch }}
+                  TAG: ${{ steps.version.outputs.tag }}
+              run: |
+                  set -euo pipefail
+
+                  if git rev-parse "$TAG" >/dev/null 2>&1; then
+                    echo "Tag $TAG already exists locally." >&2
+                    exit 1
+                  fi
+
+                  git add package.json package-lock.json
+                  if git diff --cached --quiet; then
+                    echo "No staged release-version changes found for release commit." >&2
+                    exit 1
+                  fi
+
+                  git commit -m "chore: release ${TAG}"
+                  git tag -a "$TAG" -m "$TAG"
+                  git push origin "HEAD:${BRANCH}"
+                  git push origin "$TAG"
+
+            - name: Generate release notes
+              env:
+                  PACKAGE_NAME: ${{ steps.version.outputs.package_name }}
+                  TAG: ${{ steps.version.outputs.tag }}
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  mkdir -p temp
+
+                  previous_tag=$(git tag --sort=-version:refname | grep -Fxv "$TAG" | head -n 1 || true)
+
+                  {
+                    echo "# ${PACKAGE_NAME} ${TAG}"
+                    echo ""
+                    echo "GitHub CLI extension release for cleaning up GitHub Actions workflow runs."
+                    echo ""
+                    echo "## Install / Upgrade"
+                    echo ''
+                    echo '```bash'
+                    echo 'gh extension upgrade Nick2bad4u/gh-runs-cleanup || gh extension install Nick2bad4u/gh-runs-cleanup'
+                    echo '```'
+                    echo ""
+                    echo "## Release Details"
+                    echo ""
+                    echo "- Version: \\`${VERSION}\\`"
+                    echo "- Tag: \\`${TAG}\\`"
+                    echo "- Commit: \\`${GITHUB_SHA}\\`"
+                    echo ""
+                    if [ -n "$previous_tag" ]; then
+                      echo "## Compare"
+                      echo ""
+                      echo "- [${previous_tag}...${TAG}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${previous_tag}...${TAG})"
+                      echo ""
+                      echo "## Commits"
+                      echo ""
+                      git log "${previous_tag}..HEAD" --pretty='- %s (%h)'
+                    else
+                      echo "## Commits"
+                      echo ""
+                      git log --pretty='- %s (%h)'
+                    fi
+                  } > "${RELEASE_NOTES_PATH}"
+
+            - name: Upload release notes artifact
+              uses: actions/upload-artifact@v7
+              with:
+                  name: release-notes-${{ steps.version.outputs.tag }}
+                  path: ${{ env.RELEASE_NOTES_PATH }}
+                  if-no-files-found: error
+
+            - name: Create GitHub release
+              uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+              with:
+                  tag_name: ${{ steps.version.outputs.tag }}
+                  name: ${{ steps.version.outputs.tag }}
+                  body_path: ${{ env.RELEASE_NOTES_PATH }}
+                  generate_release_notes: false
+                  fail_on_unmatched_files: false
+                  overwrite_files: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Release summary
+              if: ${{ !cancelled() }}
+              run: |
+                  {
+                    echo "## 🚀 Release Summary"
+                    echo ""
+                    echo "- Event: \`${{ github.event_name }}\`"
+                    echo "- Actor: @${{ github.actor }}"
+                    echo "- Ref: \`${{ steps.target_ref.outputs.ref }}\`"
+                    echo "- Source branch: \`${{ steps.target_ref.outputs.branch }}\`"
+                    echo "- Package: \`${{ steps.version.outputs.package_name }}\`"
+                    echo "- Version: \`${{ steps.version.outputs.version }}\`"
+                    echo "- Tag: \`${{ steps.version.outputs.tag }}\`"
+                    echo "- GitHub release: [${{ steps.version.outputs.tag }}](${{ steps.version.outputs.github_release_url }})"
+                    echo "- Release notes artifact: \`release-notes-${{ steps.version.outputs.tag }}\`"
+                  } >> "$GITHUB_STEP_SUMMARY"

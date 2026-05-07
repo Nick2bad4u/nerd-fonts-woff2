@@ -1,0 +1,78 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "name": "gh-runs-cleanup",
+    "version": "1.0.0",
+    "private": true,
+    "description": "GitHub CLI extension to bulk-delete workflow runs with safe filters.",
+    "keywords": [
+        "gh",
+        "gh-extension",
+        "github-actions",
+        "workflow-runs",
+        "cleanup"
+    ],
+    "homepage": "https://github.com/Nick2bad4u/gh-runs-cleanup",
+    "bugs": {
+        "url": "https://github.com/Nick2bad4u/gh-runs-cleanup/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Nick2bad4u/gh-runs-cleanup.git"
+    },
+    "license": "MIT",
+    "author": "Nick2bad4u <20943337+Nick2bad4u@users.noreply.github.com> (https://github.com/Nick2bad4u)",
+    "type": "module",
+    "bin": {
+        "gh-runs-cleanup": "./gh-runs-cleanup"
+    },
+    "files": [
+        "cleanup-workflow-runs.mjs",
+        "gh-runs-cleanup",
+        "src",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "dev": "node ./src/cli.ts",
+        "format": "prettier . --write",
+        "format:check": "prettier . --check",
+        "lint": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache",
+        "lint:all": "npm run lint:prettier && npm run lint && npm run typecheck",
+        "lint:all:fix": "npm run lint:prettier:fix && npm run lint:fix && npm run typecheck",
+        "lint:fix": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
+        "lint:prettier": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --check",
+        "lint:prettier:fix": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --write",
+        "release:check": "npm run lint:all && npm test",
+        "start": "node ./src/cli.ts",
+        "sync:node-version-files": "node scripts/sync-node-version-files.mjs",
+        "test": "npm run build && node --test dist/test/**/*.test.js",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "update-deps": "npx ncu -i --install never && npm run sync:node-version-files && npm install --force"
+    },
+    "engines": {
+        "node": ">=22.18.0"
+    },
+    "devDependencies": {
+        "@softonus/prettier-plugin-duplicate-remover": "^1.1.2",
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^25.6.0",
+        "eslint": "^10.2.1",
+        "globals": "^17.5.0",
+        "prettier": "^3.8.3",
+        "prettier-plugin-ini": "^1.3.0",
+        "prettier-plugin-interpolated-html-tags": "^2.0.1",
+        "prettier-plugin-jsdoc": "^1.8.0",
+        "prettier-plugin-merge": "^0.10.1",
+        "prettier-plugin-multiline-arrays": "^4.1.7",
+        "prettier-plugin-packagejson": "^3.0.2",
+        "prettier-plugin-properties": "^0.3.1",
+        "prettier-plugin-sh": "^0.18.1",
+        "prettier-plugin-sort-json": "^4.2.0",
+        "prettier-plugin-sql": "^0.20.0",
+        "prettier-plugin-toml": "^2.0.6",
+        "typescript-eslint": "^8.59.1",
+        "typescript": "^6.0.3"
+    },
+    "packageManager": "npm@11.12.1"
+}

@@ -1,0 +1,402 @@
+{
+    "$schema": "vscode://schemas/tasks",
+    "tasks": [
+        {
+            "detail": "Builds the application for production.",
+            "group": "build",
+            "icon": {
+                "color": "terminal.ansiBlue",
+                "id": "package"
+            },
+            "isBackground": false,
+            "label": "Build Application",
+            "presentation": {
+                "clear": false,
+                "close": false,
+                "echo": true,
+                "focus": false,
+                "group": "build",
+                "panel": "shared",
+                "preserveTerminalName": false,
+                "reveal": "always",
+                "revealProblems": "onProblem",
+                "showReuseMessage": false
+            },
+            "problemMatcher": {
+                "applyTo": "allDocuments",
+                "owner": "typescript",
+                "pattern": [
+                    {
+                        "code": 5,
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "message": 6,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?):(\\d+):(\\d+)\\s+-\\s+(error|warning|info)\\s+(TS\\d+):\\s*(.*)$",
+                        "severity": 4
+                    },
+                    {
+                        "code": 5,
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "message": 6,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?)\\((\\d+),(\\d+)\\):\\s+(error|warning|info)\\s+(TS\\d+):\\s*(.*)$",
+                        "severity": 4
+                    }
+                ],
+                "source": "typescript"
+            },
+            "promptOnClose": false,
+            "runOptions": {
+                "instanceLimit": 1,
+                "instancePolicy": "terminateOldest"
+            },
+            "script": "build",
+            "type": "npm"
+        },
+        {
+            "detail": "Installs npm dependencies forcefully with UpdateDeps",
+            "group": "build",
+            "icon": {
+                "color": "terminal.ansiYellow",
+                "id": "cloud-download"
+            },
+            "isBackground": false,
+            "label": "Install Dependencies (UpdateDeps)",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "clear": false,
+                "close": true,
+                "echo": true,
+                "focus": false,
+                "group": "deps-install",
+                "panel": "shared",
+                "preserveTerminalName": false,
+                "reveal": "always",
+                "revealProblems": "onProblem",
+                "showReuseMessage": false
+            },
+            "promptOnClose": false,
+            "runOptions": {
+                "instanceLimit": 1,
+                "instancePolicy": "terminateOldest"
+            },
+            "script": "update-deps",
+            "type": "npm"
+        },
+        {
+            "detail": "Runs TypeScript typechecking for all source files.",
+            "group": "test",
+            "icon": {
+                "color": "terminal.ansiCyan",
+                "id": "check-all"
+            },
+            "isBackground": false,
+            "label": "typecheck",
+            "presentation": {
+                "clear": true,
+                "close": false,
+                "echo": true,
+                "focus": false,
+                "group": "typecheck",
+                "panel": "shared",
+                "preserveTerminalName": false,
+                "reveal": "silent",
+                "revealProblems": "onProblem",
+                "showReuseMessage": false
+            },
+            "problemMatcher": {
+                "applyTo": "allDocuments",
+                "owner": "typescript",
+                "pattern": [
+                    {
+                        "code": 5,
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "message": 6,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?):(\\d+):(\\d+)\\s+-\\s+(error|warning|info)\\s+(TS\\d+):\\s*(.*)$",
+                        "severity": 4
+                    },
+                    {
+                        "code": 5,
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "message": 6,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?)\\((\\d+),(\\d+)\\):\\s+(error|warning|info)\\s+(TS\\d+):\\s*(.*)$",
+                        "severity": 4
+                    }
+                ],
+                "source": "typescript"
+            },
+            "runOptions": {
+                "instanceLimit": 1,
+                "instancePolicy": "terminateOldest"
+            },
+            "script": "typecheck",
+            "type": "npm"
+        },
+        {
+            "detail": "Fixes linting issues in source files using ESLint.",
+            "group": "test",
+            "icon": {
+                "color": "terminal.ansiMagenta",
+                "id": "tools"
+            },
+            "isBackground": false,
+            "label": "Lint:Fix",
+            "presentation": {
+                "clear": true,
+                "close": false,
+                "echo": true,
+                "focus": false,
+                "group": "lint-fix",
+                "panel": "shared",
+                "preserveTerminalName": false,
+                "reveal": "silent",
+                "revealProblems": "onProblem",
+                "showReuseMessage": false
+            },
+            "problemMatcher": {
+                "applyTo": "allDocuments",
+                "owner": "eslint",
+                "pattern": [
+                    {
+                        "file": 1,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?\\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs))(?:\\x1b\\[[0-9;]*m)*$"
+                    },
+                    {
+                        "code": 5,
+                        "column": 2,
+                        "line": 1,
+                        "loop": true,
+                        "message": 4,
+                        "regexp": "^\\s+(\\d+):(\\d+)\\s+(error|warning|info)\\s+(.+?)\\s{2,}(.*)$",
+                        "severity": 3
+                    }
+                ],
+                "source": "eslint"
+            },
+            "runOptions": {
+                "instanceLimit": 1,
+                "instancePolicy": "terminateOldest"
+            },
+            "script": "lint:fix:quiet",
+            "type": "npm"
+        },
+        {
+            "detail": "Runs the test suite",
+            "group": "test",
+            "icon": {
+                "color": "terminal.ansiGreen",
+                "id": "beaker"
+            },
+            "isBackground": false,
+            "label": "Test",
+            "presentation": {
+                "clear": true,
+                "close": false,
+                "echo": true,
+                "focus": false,
+                "group": "test-vitest",
+                "panel": "shared",
+                "preserveTerminalName": false,
+                "reveal": "silent",
+                "revealProblems": "onProblem",
+                "showReuseMessage": false
+            },
+            "problemMatcher": {
+                "applyTo": "allDocuments",
+                "owner": "vitest",
+                "pattern": [
+                    {
+                        "message": 1,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*\\s*(?:AssertionError|Error|RangeError|ReferenceError|TypeError|SyntaxError|AggregateError):\\s*(?:\\x1b\\[[0-9;]*m)*(.*)$"
+                    },
+                    {
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*\\s*at\\s+(?:.+?\\s+\\()?(?:\\x1b\\[[0-9;]*m)*((?:[A-Za-z]:[\\\\/]|[\\\\/])?[^:\\r\\n()]+?):(\\d+):(\\d+)\\)?"
+                    }
+                ],
+                "severity": "error",
+                "source": "vitest"
+            },
+            "runOptions": {
+                "instanceLimit": 1,
+                "instancePolicy": "terminateOldest"
+            },
+            "script": "test",
+            "type": "npm"
+        },
+        {
+            "detail": "Runs the test suite with coverage reporting using Vitest.",
+            "group": "test",
+            "icon": {
+                "color": "terminal.ansiRed",
+                "id": "graph"
+            },
+            "isBackground": false,
+            "label": "Test:Coverage",
+            "presentation": {
+                "clear": true,
+                "close": false,
+                "echo": true,
+                "focus": false,
+                "group": "test-coverage",
+                "panel": "shared",
+                "preserveTerminalName": false,
+                "reveal": "silent",
+                "revealProblems": "onProblem",
+                "showReuseMessage": false
+            },
+            "problemMatcher": {
+                "applyTo": "allDocuments",
+                "owner": "vitest",
+                "pattern": [
+                    {
+                        "message": 1,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*\\s*(?:AssertionError|Error|RangeError|ReferenceError|TypeError|SyntaxError|AggregateError):\\s*(?:\\x1b\\[[0-9;]*m)*(.*)$"
+                    },
+                    {
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*\\s*at\\s+(?:.+?\\s+\\()?(?:\\x1b\\[[0-9;]*m)*((?:[A-Za-z]:[\\\\/]|[\\\\/])?[^:\\r\\n()]+?):(\\d+):(\\d+)\\)?"
+                    }
+                ],
+                "severity": "error",
+                "source": "vitest"
+            },
+            "runOptions": {
+                "instanceLimit": 1,
+                "instancePolicy": "terminateOldest"
+            },
+            "script": "test:coverage",
+            "type": "npm"
+        },
+        {
+            "detail": "Runs all linters: TypeScript typechecking, ESLint, Stylelint, Madge, and Knip.",
+            "group": "test",
+            "icon": {
+                "color": "terminal.ansiYellow",
+                "id": "checklist"
+            },
+            "isBackground": false,
+            "label": "Lint:All:Fix",
+            "presentation": {
+                "clear": true,
+                "close": false,
+                "echo": true,
+                "focus": false,
+                "group": "lint-all",
+                "panel": "shared",
+                "preserveTerminalName": false,
+                "reveal": "silent",
+                "revealProblems": "onProblem",
+                "showReuseMessage": false
+            },
+            "problemMatcher": [
+                {
+                    "applyTo": "allDocuments",
+                    "owner": "typescript",
+                    "pattern": [
+                        {
+                            "code": 5,
+                            "column": 3,
+                            "file": 1,
+                            "line": 2,
+                            "message": 6,
+                            "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?):(\\d+):(\\d+)\\s+-\\s+(error|warning|info)\\s+(TS\\d+):\\s*(.*)$",
+                            "severity": 4
+                        },
+                        {
+                            "code": 5,
+                            "column": 3,
+                            "file": 1,
+                            "line": 2,
+                            "message": 6,
+                            "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?)\\((\\d+),(\\d+)\\):\\s+(error|warning|info)\\s+(TS\\d+):\\s*(.*)$",
+                            "severity": 4
+                        }
+                    ],
+                    "source": "typescript"
+                },
+                {
+                    "applyTo": "allDocuments",
+                    "owner": "eslint",
+                    "pattern": [
+                        {
+                            "file": 1,
+                            "regexp": "^(?:\\x1b\\[[0-9;]*m)*(.+?\\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs))(?:\\x1b\\[[0-9;]*m)*$"
+                        },
+                        {
+                            "code": 5,
+                            "column": 2,
+                            "line": 1,
+                            "loop": true,
+                            "message": 4,
+                            "regexp": "^\\s+(\\d+):(\\d+)\\s+(error|warning|info)\\s+(.+?)\\s{2,}(.*)$",
+                            "severity": 3
+                        }
+                    ],
+                    "source": "eslint"
+                },
+                {
+                    "applyTo": "allDocuments",
+                    "owner": "stylelint",
+                    "pattern": {
+                        "code": 5,
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "message": 4,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*\\s*(.+?):(\\d+):(\\d+)\\s*(?:\\x1b\\[[0-9;]*m)*[✖×](?:\\x1b\\[[0-9;]*m)*\\s+(.+?)\\s{2,}(.*)$"
+                    },
+                    "severity": "error",
+                    "source": "stylelint"
+                },
+                {
+                    "applyTo": "allDocuments",
+                    "owner": "remark",
+                    "pattern": {
+                        "code": 7,
+                        "column": 3,
+                        "endColumn": 4,
+                        "file": 1,
+                        "line": 2,
+                        "message": 6,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*\\s*(.+?):(\\d+):(\\d+)(?:-(\\d+))?\\s+(warning|error)\\s+(.+?)\\s{2,}(.*)$",
+                        "severity": 5
+                    },
+                    "source": "remark"
+                },
+                {
+                    "applyTo": "allDocuments",
+                    "owner": "knip",
+                    "pattern": {
+                        "column": 3,
+                        "file": 1,
+                        "line": 2,
+                        "message": 4,
+                        "regexp": "^(?:\\x1b\\[[0-9;]*m)*(?!.*\\b(?:error|warning|info)\\s+TS\\d+:)(.+?):(\\d+):(\\d+)\\s+(.*)$"
+                    },
+                    "severity": "warning",
+                    "source": "knip"
+                }
+            ],
+            "runOptions": {
+                "instanceLimit": 1,
+                "instancePolicy": "terminateOldest"
+            },
+            "script": "lint:all:fix:quiet",
+            "type": "npm"
+        }
+    ],
+    "version": "2.0.0"
+}
