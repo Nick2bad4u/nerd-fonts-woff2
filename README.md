@@ -1,90 +1,145 @@
-# gh-runs-cleanup
+# nerd-font-woff2
 
-[![latest GitHub release.](https://flat.badgen.net/github/release/Nick2bad4u/gh-runs-cleanup?color=cyan)](https://github.com/Nick2bad4u/gh-runs-cleanup/releases) [![GitHub stars.](https://flat.badgen.net/github/stars/Nick2bad4u/gh-runs-cleanup?color=yellow)](https://github.com/Nick2bad4u/gh-runs-cleanup/stargazers) [![GitHub forks.](https://flat.badgen.net/github/forks/Nick2bad4u/gh-runs-cleanup?color=green)](https://github.com/Nick2bad4u/gh-runs-cleanup/forks) [![GitHub open issues.](https://flat.badgen.net/github/open-issues/Nick2bad4u/gh-runs-cleanup?color=red)](https://github.com/Nick2bad4u/gh-runs-cleanup/issues)
+`nerd-font-woff2` is a TypeScript CLI project for building WOFF2 font assets from local TTF/OTF source files.
 
-`gh-runs-cleanup` is a GitHub CLI extension for safely cleaning up GitHub Actions workflow runs in bulk.
+Primary use case: convert Nerd Fonts releases into a clean WOFF2 asset tree that can be published to GitHub Releases and consumed through jsDelivr.
 
-It is designed for repos that accumulate thousands of failed/cancelled runs and need controlled cleanup with clear filters and safety checks.
+## Current project scope
 
-## Install
+- Recursively scan one or more source directories for `.ttf` / `.otf` files.
+- Build a deterministic conversion plan (dry-run by default).
+- Convert files using an external WOFF2 converter command (for example `woff2_compress`).
+- Generate an optional JSON asset index for downstream upload/publishing automation.
 
-```bash
-gh extension install Nick2bad4u/gh-runs-cleanup
+## Distribution strategy (npm vs URL)
+
+Both approaches are valid, and this project is now set up for either:
+
+- **Primary runtime delivery (recommended):** serve built WOFF2 files via GitHub Releases + jsDelivr URLs.
+- **Optional package delivery:** publish this repo to npm so consumers can pin a version and access bundled assets.
+
+For browser usage, URL delivery is usually simplest. npm is useful when teams want version pinning through package managers or local bundling workflows.
+
+### Committed asset delivery (raw GitHub)
+
+This repo is configured to keep generated fonts committed under `assets/woff2/**` so they can be consumed directly from git tags.
+
+Raw URL pattern:
+
+```text
+https://raw.githubusercontent.com/Nick2bad4u/nerd-fonts-woff2/vX.Y.Z/assets/woff2/<family>/<file>.woff2
 ```
 
-Project site: <https://nick2bad4u.github.io/gh-runs-cleanup/>
+Use tagged versions (`vX.Y.Z`) for stable links.
 
 ## Requirements
 
-- `gh` CLI installed and authenticated
 - Node.js `>=22.18.0`
+- A WOFF2 converter executable available locally (default command: `woff2_compress`)
 
-Extension installs run directly from the repository source; no local build step is required for end users.
+## Install (local development)
+
+```bash
+npm install
+```
+
+## npm packaging status
+
+- Package metadata includes `bin` entry `nerd-font-woff2`.
+- `prepack` runs `npm run build` so published tarballs include compiled `dist/` output.
+- Published files are restricted to runtime essentials (`dist/`, `assets/`, wrapper, README, LICENSE).
+- Release workflow validates that committed assets exist in `assets/woff2` before creating a release.
+
+> Note: the package is currently marked `"private": true` to prevent accidental publish during active development.
+> When you're ready, set `"private": false`, run `npm pack` to verify contents, then publish.
 
 ## Usage
 
+### Plan only (safe default)
+
 ```bash
-gh runs-cleanup --repo owner/repo --dry-run
-gh runs-cleanup --repo owner/repo --status failure,cancelled --confirm
-gh runs-cleanup --repo owner/repo --workflow CI --branch main --max-delete 100 --confirm
-gh runs-cleanup --repo owner/repo --dry-run --json
-gh runs-cleanup --before-days 30 --status failure --confirm
+node ./src/cli.ts --source-dir ./temp/nerd-fonts --dry-run
 ```
 
-## Repository selection
+or via package command:
 
-- `--repo <owner/name>`: target repository.
-- If `--repo` is omitted, the extension attempts to resolve the current repo via `gh repo view`.
+```bash
+npx nerd-font-woff2 --source-dir ./temp/nerd-fonts --dry-run
+```
 
-## Filters
+### Convert files
 
-- `--status <value[,value...]>` (repeatable; default `failure,cancelled`)
-- `--workflow <name|id>`
-- `--exclude-workflow <name[,name...]>` (repeatable)
-- `--branch <name>`
-- `--exclude-branch <name[,name...]>` (repeatable)
-- `--event <event>`
-- `--user <login>`
-- `--commit <sha>`
-- `--created <date>`
-- `--limit <n>` (default `200`)
-- `--before-days <n>`: only include runs older than N days
-- `--max-delete <n>`
-- `--order <oldest|newest|none>`: order matched runs before deletion (`oldest` default)
+```bash
+node ./src/cli.ts --source-dir ./temp/nerd-fonts --convert --confirm
+```
 
-## Execution flags
+### Convert with JSON summary and index file
 
-- `--dry-run`: preview matches without deleting
-- `--confirm`: required to actually delete
-- `--yes`: alias for `--confirm`
-- `--all-statuses`: target all valid GitHub run statuses
-- `--max-retries <n>`: retry failed delete calls (`2` default)
-- `--retry-delay-ms <n>`: initial retry delay in ms (`200` default)
-- `--fail-fast`: stop after first failed deletion
-- `--max-failures <n>`: stop after `n` failed deletions
-- `--verbose`: print matched run details
-- `--quiet`: suppress most non-error text output
-- `--json`: emit a machine-readable summary
+```bash
+node ./src/cli.ts \
+  --source-dir ./temp/nerd-fonts \
+  --convert \
+  --confirm \
+  --index-file ./temp/font-index.json \
+  --json
+```
+
+### Use manifest file
+
+```bash
+node ./src/cli.ts --manifest ./nerd-font-woff2.config.json --convert --confirm
+```
+
+Example manifest:
+
+```json
+{
+  "sourceDirs": ["./temp/nerd-fonts"],
+  "outDir": "./assets/woff2",
+  "tempDir": "./temp/work",
+  "converter": "woff2_compress",
+  "converterArgs": [],
+  "includeExts": ["ttf", "otf"],
+  "indexFile": "./temp/font-index.json"
+}
+```
+
+## CLI options
+
+- `--source-dir <path[,path...]>` (repeatable)
+- `--manifest <file>`
+- `--out-dir <path>`
+- `--temp-dir <path>`
+- `--include-ext <ttf,otf>`
+- `--max-files <n>`
+- `--convert`
+- `--dry-run`
+- `--confirm` / `--yes`
+- `--converter <cmd>`
+- `--converter-arg <value>` (repeatable)
+- `--fail-fast`
+- `--index-file <path>`
+- `--verbose`
+- `--json`
 - `--help`
 
 ## Exit codes
 
 - `0`: success
-- `1`: validation/auth/runtime error
-- `2`: partial failure (some run deletions failed)
+- `1`: validation/runtime/dependency error
+- `2`: partial conversion failure (one or more files failed)
 
-## Development
+## Planned next steps
+
+- Add source acquisition commands for Nerd Fonts upstream archives/releases.
+- Add publish commands for GitHub Release assets.
+- Add jsDelivr-friendly manifest generation and versioned output layout.
+
+## Development checks
 
 ```bash
-npm install
-npm run typecheck
 npm run build
+npm run typecheck
 npm run lint
 npm test
 ```
-
-## TypeScript and build output
-
-- Source code lives in `src/`.
-- The extension entrypoints (`gh-runs-cleanup`, `cleanup-workflow-runs.mjs`) execute `src/cli.ts` directly.
-- Build output goes to `dist/` via `tsc` for CI validation and local compiled testing.

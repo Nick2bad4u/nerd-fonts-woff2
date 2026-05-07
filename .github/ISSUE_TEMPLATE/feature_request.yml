@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an enhancement for gh-runs-cleanup
+description: Suggest an enhancement for nerd-font-woff2
 title: "[Feature]: "
 labels:
     - enhancement
@@ -8,7 +8,7 @@ body:
       id: problem
       attributes:
           label: Problem statement
-          description: What workflow problem are you trying to solve?
+          description: What font conversion/publishing workflow problem are you trying to solve?
       validations:
           required: true
 
