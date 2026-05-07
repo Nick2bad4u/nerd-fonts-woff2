@@ -1,48 +1,46 @@
 #!/usr/bin/env node
 
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { printHelp, renderHelpText } from "./cli-help.js";
-import {
-    deleteRunWithRetry,
-    listReposForOwner,
-    listRuns,
-    resolveAuthenticatedLogin,
-    resolveRepo,
-    runGh,
-} from "./cli-gh.js";
-import {
-    getCreatedAtEpoch,
-    printDryRunWorkflowSummary,
-    printSummaryDetails,
-    printTextSummary,
-    printVerboseRuns,
-    sortRuns,
-} from "./cli-output.js";
-import {
-    createProgressBar,
-    createStyler,
-    shouldShowProgress,
-    shouldUseColor,
-    shouldUseUnicode,
-} from "./cli-styling.js";
-import {
-    type ColorMode,
-    type ErrorCategory,
-    type ParsedOptions,
-    type RunSummary,
-    type Styler,
-    type UnicodeMode,
-    type WorkflowRun,
-    VALID_STATUSES,
-} from "./cli-types.js";
+import { printHelp } from "./cli-help.js";
+import { type ErrorCategory, type FontIndexEntry, type Mode, type ParsedOptions, type PlannedFontFile, type RunSummary } from "./cli-types.js";
+
+type ExecutionConfig = {
+    confirm: boolean;
+    converter: string;
+    converterArgs: string[];
+    dryRun: boolean;
+    failFast: boolean;
+    includeExts: Set<string>;
+    indexFile?: string;
+    jsonOutput: boolean;
+    maxFiles?: number;
+    mode: Mode;
+    outDir: string;
+    sourceDirs: string[];
+    tempDir: string;
+    verbose: boolean;
+};
+
+type ManifestFile = {
+    converter?: string;
+    converterArgs?: string[];
+    includeExts?: string[];
+    indexFile?: string;
+    maxFiles?: number;
+    outDir?: string;
+    sourceDirs?: string[];
+    tempDir?: string;
+};
 
 function parseArguments(args: string[]): ParsedOptions {
     const parsed: ParsedOptions = {};
 
     for (let index = 0; index < args.length; index += 1) {
         const token = args[index];
-
         if (!token?.startsWith("--")) {
             continue;
         }
@@ -51,21 +49,14 @@ function parseArguments(args: string[]): ParsedOptions {
         const key = (rawKey ?? "").trim();
 
         if (
+            key === "help" ||
             key === "dry-run" ||
             key === "confirm" ||
             key === "yes" ||
-            key === "verbose" ||
-            key === "quiet" ||
-            key === "all-statuses" ||
-            key === "fail-fast" ||
-            key === "help" ||
+            key === "convert" ||
             key === "json" ||
-            key === "summary" ||
-            key === "no-color" ||
-            key === "no-unicode" ||
-            key === "no-progress" ||
-            key === "ci" ||
-            key === "all-repos"
+            key === "verbose" ||
+            key === "fail-fast"
         ) {
             parsed[key] = true;
             continue;
@@ -78,17 +69,16 @@ function parseArguments(args: string[]): ParsedOptions {
 
         if (
             inlineValue === undefined &&
-            nextToken &&
+            typeof nextToken === "string" &&
             !nextToken.startsWith("--")
         ) {
             index += 1;
         }
 
         if (
-            key === "status" ||
-            key === "exclude-workflow" ||
-            key === "exclude-branch" ||
-            key === "repos"
+            key === "source-dir" ||
+            key === "converter-arg" ||
+            key === "include-ext"
         ) {
             const existing = parsed[key];
             const bucket = Array.isArray(existing) ? existing : [];
@@ -106,8 +96,7 @@ function parseArguments(args: string[]): ParsedOptions {
 function emitError(
     message: string,
     category: ErrorCategory,
-    asJson: boolean,
-    styler?: Styler
+    asJson: boolean
 ): number {
     if (asJson) {
         console.error(
@@ -125,844 +114,535 @@ function emitError(
         return 1;
     }
 
-    const rendered = styler
-        ? styler.error(`Error: ${message}`)
-        : `Error: ${message}`;
-    console.error(rendered);
+    console.error(`Error: ${message}`);
     return 1;
 }
 
-function isValidRepoSlug(value: string): boolean {
-    return /^[^\s/]+\/[^\s/]+$/u.test(value);
-}
+function collectListOption(options: ParsedOptions, key: string): string[] {
+    const value = options[key];
 
-function collectStringListOption(
-    options: ParsedOptions,
-    key: string
-): string[] {
-    const rawValues = options[key];
-    if (Array.isArray(rawValues)) {
-        return rawValues
-            .flatMap((value) => value.split(","))
-            .map((value) => value.trim())
-            .filter((value) => value.length > 0);
+    if (Array.isArray(value)) {
+        return value
+            .flatMap((part) => part.split(","))
+            .map((part) => part.trim())
+            .filter((part) => part.length > 0);
     }
 
-    if (typeof rawValues === "string") {
-        return rawValues
+    if (typeof value === "string") {
+        return value
             .split(",")
-            .map((value) => value.trim())
-            .filter((value) => value.length > 0);
+            .map((part) => part.trim())
+            .filter((part) => part.length > 0);
     }
 
     return [];
 }
 
-type ProcessRepositoryParams = {
-    beforeDays: number | undefined;
-    ciMode: boolean;
-    dryRun: boolean;
-    excludedBranchNames: Set<string>;
-    excludedWorkflowNames: Set<string>;
-    failFast: boolean;
-    jsonOutput: boolean;
-    limit: number;
-    maxDelete: number | undefined;
-    maxFailures: number | undefined;
-    maxRetries: number;
-    noProgress: boolean;
-    order: "oldest" | "newest" | "none";
-    options: ParsedOptions;
-    quiet: boolean;
-    repoIndex: number;
-    repoTotal: number;
-    resolvedRepo: string;
-    retryDelayMs: number;
-    statuses: string[];
-    styler: Styler;
-    summaryMode: boolean;
-    unicodeTables: boolean;
-    verbose: boolean;
-};
-
-function processRepository(
-    params: ProcessRepositoryParams
-): RunSummary | number {
-    const {
-        beforeDays,
-        ciMode,
-        dryRun,
-        excludedBranchNames,
-        excludedWorkflowNames,
-        failFast,
-        jsonOutput,
-        limit,
-        maxDelete,
-        maxFailures,
-        maxRetries,
-        noProgress,
-        options,
-        order,
-        quiet,
-        repoIndex,
-        repoTotal,
-        resolvedRepo,
-        retryDelayMs,
-        statuses,
-        styler,
-        summaryMode,
-        unicodeTables,
-        verbose,
-    } = params;
-
-    if (!jsonOutput && !quiet && repoTotal > 1) {
-        if (repoIndex > 0) {
-            console.log("");
-        }
-        console.log(
-            styler.heading(
-                `Repository ${repoIndex + 1}/${repoTotal}: ${resolvedRepo}`
-            )
-        );
+function getStringOption(options: ParsedOptions, key: string): string | undefined {
+    const value = options[key];
+    if (typeof value !== "string") {
+        return undefined;
     }
 
-    const repoStartedAt = Date.now();
-    const allRuns: WorkflowRun[] = [];
-    const expectedFetchTotal = Math.max(1, statuses.length * limit);
-    const showProgress = shouldShowProgress(
-        jsonOutput,
-        quiet,
-        verbose,
-        noProgress,
-        ciMode
-    );
-    const fetchProgress = createProgressBar(
-        "Fetching runs",
-        expectedFetchTotal,
-        styler,
-        showProgress
-    );
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
 
-    try {
-        for (const [index, status] of statuses.entries()) {
-            const beforeCount = allRuns.length;
-            const runs = listRuns(
-                resolvedRepo,
-                status,
-                options,
-                (fetchedInStatus, detail) => {
-                    fetchProgress.update(
-                        beforeCount + fetchedInStatus,
-                        `s=${index + 1}/${statuses.length} ${status} ${detail} runs=${beforeCount + fetchedInStatus}`
-                    );
-                }
-            );
+function parseManifest(pathToManifest: string): ManifestFile {
+    const raw = readFileSync(pathToManifest, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
 
-            allRuns.push(...runs);
-            fetchProgress.update(
-                allRuns.length,
-                `s=${index + 1}/${statuses.length} ${status} done runs=${allRuns.length}`
+    if (typeof parsed !== "object" || parsed === null) {
+        throw new Error("manifest root must be a JSON object");
+    }
+
+    const manifest = parsed as Record<string, unknown>;
+
+    const getString = (key: string): string | undefined =>
+        typeof manifest[key] === "string" ? manifest[key] : undefined;
+    const getStringArray = (key: string): string[] | undefined => {
+        const value = manifest[key];
+        if (!Array.isArray(value)) {
+            return undefined;
+        }
+
+        const entries = value.filter((entry): entry is string => typeof entry === "string");
+        return entries.length === value.length ? entries : undefined;
+    };
+
+    const manifestFile: ManifestFile = {};
+
+    const converter = getString("converter");
+    if (typeof converter === "string") {
+        manifestFile.converter = converter;
+    }
+
+    const converterArgs = getStringArray("converterArgs");
+    if (Array.isArray(converterArgs)) {
+        manifestFile.converterArgs = converterArgs;
+    }
+
+    const includeExts = getStringArray("includeExts");
+    if (Array.isArray(includeExts)) {
+        manifestFile.includeExts = includeExts;
+    }
+
+    const indexFile = getString("indexFile");
+    if (typeof indexFile === "string") {
+        manifestFile.indexFile = indexFile;
+    }
+
+    if (typeof manifest["maxFiles"] === "number") {
+        manifestFile.maxFiles = manifest["maxFiles"];
+    }
+
+    const outDir = getString("outDir");
+    if (typeof outDir === "string") {
+        manifestFile.outDir = outDir;
+    }
+
+    const sourceDirs = getStringArray("sourceDirs");
+    if (Array.isArray(sourceDirs)) {
+        manifestFile.sourceDirs = sourceDirs;
+    }
+
+    const tempDir = getString("tempDir");
+    if (typeof tempDir === "string") {
+        manifestFile.tempDir = tempDir;
+    }
+
+    return manifestFile;
+}
+
+function toNonEmptyArray(value: string[] | undefined): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+}
+
+function normalizeExtList(entries: string[]): Set<string> {
+    const normalized = entries
+        .map((entry) => entry.trim().toLowerCase())
+        .map((entry) => (entry.startsWith(".") ? entry.slice(1) : entry))
+        .filter((entry) => entry.length > 0);
+
+    return new Set(normalized);
+}
+
+function buildExecutionConfig(options: ParsedOptions): ExecutionConfig | number {
+    const jsonOutput = options["json"] === true;
+
+    if (options["help"] === true) {
+        printHelp();
+        return 0;
+    }
+
+    const manifestPath = getStringOption(options, "manifest");
+    let manifest: ManifestFile = {};
+
+    if (typeof manifestPath === "string") {
+        try {
+            manifest = parseManifest(resolve(manifestPath));
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return emitError(
+                `failed to read --manifest file: ${message}`,
+                "validation_error",
+                jsonOutput
             );
         }
-        fetchProgress.done();
-    } catch (error) {
-        fetchProgress.done();
-        const message = error instanceof Error ? error.message : String(error);
+    }
+
+    const sourceFromManifest = toNonEmptyArray(manifest.sourceDirs);
+    const sourceFromFlags = collectListOption(options, "source-dir");
+    const sourceDirs = Array.from(
+        new Set(
+            [...sourceFromManifest, ...sourceFromFlags].map((entry) =>
+                resolve(entry)
+            )
+        )
+    );
+
+    if (sourceDirs.length === 0) {
         return emitError(
-            `failed to list runs for ${resolvedRepo}: ${message}`,
-            "gh_cli_error",
-            jsonOutput,
-            styler
+            "at least one --source-dir is required (or sourceDirs in --manifest).",
+            "validation_error",
+            jsonOutput
         );
     }
 
-    const uniqueById = new Map<number, WorkflowRun>();
-    for (const run of allRuns) {
-        uniqueById.set(run.databaseId, run);
+    for (const sourceDir of sourceDirs) {
+        if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
+            return emitError(
+                `source directory does not exist: ${sourceDir}`,
+                "validation_error",
+                jsonOutput
+            );
+        }
     }
 
-    const dedupedRuns = Array.from(uniqueById.values());
-    const orderedRuns = sortRuns(dedupedRuns, order);
+    const mode: Mode = options["convert"] === true ? "convert" : "plan";
+    const dryRun = options["dry-run"] === true;
+    const confirm = options["confirm"] === true || options["yes"] === true;
 
-    let skippedByExclusion = 0;
-    const includedRuns = orderedRuns.filter((run) => {
-        const workflowName = run.workflowName?.toLowerCase();
-        const branchName = run.headBranch?.toLowerCase();
+    if (mode === "convert" && !dryRun && !confirm) {
+        return emitError(
+            "Safety stop: pass --confirm for conversion, or use --dry-run.",
+            "validation_error",
+            jsonOutput
+        );
+    }
 
-        const excludedByWorkflow =
-            typeof workflowName === "string" &&
-            excludedWorkflowNames.has(workflowName);
-        const excludedByBranch =
-            typeof branchName === "string" &&
-            excludedBranchNames.has(branchName);
+    const includeFromManifest = toNonEmptyArray(manifest.includeExts);
+    const includeFromFlags = collectListOption(options, "include-ext");
+    let includeEntries = ["ttf", "otf"];
+    if (includeFromManifest.length > 0) {
+        includeEntries = includeFromManifest;
+    }
+    if (includeFromFlags.length > 0) {
+        includeEntries = includeFromFlags;
+    }
 
-        if (excludedByWorkflow || excludedByBranch) {
-            skippedByExclusion += 1;
-            return false;
+    const includeExts = normalizeExtList(includeEntries);
+
+    const unsupportedExts = Array.from(includeExts).filter(
+        (ext) => ext !== "ttf" && ext !== "otf"
+    );
+    if (unsupportedExts.length > 0) {
+        return emitError(
+            `unsupported --include-ext values: ${unsupportedExts.join(", ")} (allowed: ttf, otf).`,
+            "validation_error",
+            jsonOutput
+        );
+    }
+
+    const maxFilesRaw =
+        getStringOption(options, "max-files") ??
+        (typeof manifest.maxFiles === "number" ? String(manifest.maxFiles) : undefined);
+    const maxFiles =
+        typeof maxFilesRaw === "string"
+            ? Number.parseInt(maxFilesRaw, 10)
+            : undefined;
+
+    if (
+        maxFilesRaw !== undefined &&
+        (!Number.isFinite(maxFiles) || (maxFiles ?? 0) < 1)
+    ) {
+        return emitError(
+            "--max-files must be a positive integer.",
+            "validation_error",
+            jsonOutput
+        );
+    }
+
+    const outDir = resolve(
+        getStringOption(options, "out-dir") ??
+            manifest.outDir ??
+            "assets/woff2"
+    );
+    const tempDir = resolve(
+        getStringOption(options, "temp-dir") ??
+            manifest.tempDir ??
+            "temp/work"
+    );
+    const indexFile =
+        getStringOption(options, "index-file") ?? manifest.indexFile;
+
+    const converter =
+        getStringOption(options, "converter") ?? manifest.converter ?? "woff2_compress";
+    if (converter.trim().length === 0) {
+        return emitError(
+            "--converter must be a non-empty command.",
+            "validation_error",
+            jsonOutput
+        );
+    }
+
+    const converterArgs = [
+        ...toNonEmptyArray(manifest.converterArgs),
+        ...collectListOption(options, "converter-arg"),
+    ];
+
+    const config: ExecutionConfig = {
+        confirm,
+        converter,
+        converterArgs,
+        dryRun,
+        failFast: options["fail-fast"] === true,
+        includeExts,
+        jsonOutput,
+        mode,
+        outDir,
+        sourceDirs,
+        tempDir,
+        verbose: options["verbose"] === true,
+    };
+
+    if (typeof indexFile === "string") {
+        config.indexFile = resolve(indexFile);
+    }
+
+    if (typeof maxFiles === "number") {
+        config.maxFiles = maxFiles;
+    }
+
+    return config;
+}
+
+function listFontFiles(sourceDir: string, includeExts: Set<string>): string[] {
+    const discovered: string[] = [];
+    const queue: string[] = [sourceDir];
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (typeof current !== "string") {
+            continue;
         }
 
-        return true;
-    });
-
-    let skippedByAge = 0;
-    const now = Date.now();
-    const ageCutoffEpoch =
-        typeof beforeDays === "number"
-            ? now - beforeDays * 24 * 60 * 60 * 1000
-            : undefined;
-    const runsToProcess =
-        typeof ageCutoffEpoch === "number"
-            ? includedRuns.filter((run) => {
-                  const createdEpoch = getCreatedAtEpoch(run);
-                  const include = Number.isFinite(createdEpoch)
-                      ? createdEpoch <= ageCutoffEpoch
-                      : true;
-                  if (!include) {
-                      skippedByAge += 1;
-                  }
-                  return include;
-              })
-            : includedRuns;
-
-    const candidates =
-        Number.isFinite(maxDelete) && maxDelete !== undefined
-            ? runsToProcess.slice(0, maxDelete)
-            : runsToProcess;
-
-    if (verbose && !jsonOutput && !quiet) {
-        printVerboseRuns(candidates, styler, unicodeTables);
-    }
-
-    let deleted = 0;
-    const failedIds: number[] = [];
-    let attempted = 0;
-
-    if (!jsonOutput && !quiet) {
-        console.log(
-            styler.info(
-                `Planned deletions: ${candidates.length} (from ${allRuns.length} fetched runs, ${dedupedRuns.length} unique).`
-            )
+        const entries = readdirSync(current, { withFileTypes: true }).sort((a, b) =>
+            a.name.localeCompare(b.name)
         );
-    }
 
-    const deleteProgress = createProgressBar(
-        "Deleting runs",
-        candidates.length,
-        styler,
-        showProgress && !dryRun
-    );
+        for (const entry of entries) {
+            const absolutePath = join(current, entry.name);
 
-    if (!dryRun) {
-        for (const run of candidates) {
-            attempted += 1;
-
-            const result = deleteRunWithRetry(
-                resolvedRepo,
-                run.databaseId,
-                maxRetries,
-                retryDelayMs,
-                (attemptNumber, totalAttempts) => {
-                    deleteProgress.update(
-                        attempted - 1,
-                        `id=${run.databaseId} a=${attemptNumber}/${totalAttempts} d=${deleted} f=${failedIds.length}`
-                    );
-                }
-            );
-
-            if (result.ok) {
-                deleted += 1;
-            } else {
-                failedIds.push(run.databaseId);
-                if (verbose && !jsonOutput) {
-                    console.error(
-                        `Delete failed for run ${run.databaseId} after ${result.attempts} attempt(s): ${result.error ?? "unknown"}`
-                    );
-                }
-
-                if (failFast) {
-                    break;
-                }
-
-                if (
-                    typeof maxFailures === "number" &&
-                    failedIds.length >= maxFailures
-                ) {
-                    break;
-                }
+            if (entry.isDirectory()) {
+                queue.push(absolutePath);
+                continue;
             }
 
-            deleteProgress.update(
-                attempted,
-                `d=${deleted} f=${failedIds.length}`
+            if (!entry.isFile()) {
+                continue;
+            }
+
+            const extension = extname(entry.name)
+                .replace(/^\./u, "")
+                .toLowerCase();
+            if (includeExts.has(extension)) {
+                discovered.push(absolutePath);
+            }
+        }
+    }
+
+    return discovered;
+}
+
+function buildPlan(config: ExecutionConfig): PlannedFontFile[] {
+    const plans: PlannedFontFile[] = [];
+
+    for (const sourceDir of config.sourceDirs) {
+        const files = listFontFiles(sourceDir, config.includeExts);
+        const sourceRoot = basename(sourceDir);
+
+        for (const sourcePath of files) {
+            const relativeInputPath = normalize(relative(sourceDir, sourcePath));
+            const relativeOutputPath = normalize(
+                join(
+                    sourceRoot,
+                    relativeInputPath.replace(/\.(ttf|otf)$/iu, ".woff2")
+                )
             );
+
+            plans.push({
+                relativeInputPath,
+                relativeOutputPath,
+                sourcePath,
+                sourceRoot,
+            });
+        }
+    }
+
+    const sorted = plans.toSorted((left, right) =>
+        left.relativeOutputPath.localeCompare(right.relativeOutputPath)
+    );
+
+    if (typeof config.maxFiles === "number") {
+        return sorted.slice(0, config.maxFiles);
+    }
+
+    return sorted;
+}
+
+function writeIndexFile(indexFile: string, entries: FontIndexEntry[]): void {
+    mkdirSync(dirname(indexFile), { recursive: true });
+    writeFileSync(indexFile, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
+}
+
+function buildIndexEntries(
+    config: ExecutionConfig,
+    plan: PlannedFontFile[],
+    convertedTargets: Set<string>
+): FontIndexEntry[] {
+    const entries: FontIndexEntry[] = [];
+
+    for (const planned of plan) {
+        const outputPath = resolve(join(config.outDir, planned.relativeOutputPath));
+        const converted = convertedTargets.has(outputPath);
+
+        const firstSegment = planned.relativeOutputPath.split(/[\\/]/u)[0] ?? "unknown";
+
+        let sizeBytes: number | null = null;
+        if (existsSync(outputPath)) {
+            sizeBytes = statSync(outputPath).size;
         }
 
-        deleteProgress.done();
+        entries.push({
+            converted,
+            family: firstSegment,
+            fileName: planned.relativeOutputPath.split(/[\\/]/u).at(-1) ?? "",
+            outputPath,
+            sizeBytes,
+            sourcePath: planned.sourcePath,
+        });
+    }
+
+    return entries;
+}
+
+function convertFonts(config: ExecutionConfig, plan: PlannedFontFile[]): RunSummary {
+    const startedAt = Date.now();
+
+    let converted = 0;
+    const failures: string[] = [];
+    const convertedTargets = new Set<string>();
+
+    if (config.mode === "convert" && !config.dryRun) {
+        mkdirSync(config.tempDir, { recursive: true });
+        mkdirSync(config.outDir, { recursive: true });
+    }
+
+    for (const planned of plan) {
+        const outputPath = resolve(join(config.outDir, planned.relativeOutputPath));
+
+        if (config.mode !== "convert" || config.dryRun) {
+            continue;
+        }
+
+        const stagedInput = resolve(
+            join(config.tempDir, "staging", planned.sourceRoot, planned.relativeInputPath)
+        );
+        mkdirSync(dirname(stagedInput), { recursive: true });
+        copyFileSync(planned.sourcePath, stagedInput);
+
+        const commandResult = spawnSync(config.converter, [...config.converterArgs, stagedInput], {
+            encoding: "utf8",
+            shell: false,
+        });
+
+        if (commandResult.status !== 0) {
+            const stderr = commandResult.stderr.trim();
+            const stdout = commandResult.stdout.trim();
+            let message = "converter exited with non-zero status";
+            if (stdout.length > 0) {
+                message = stdout;
+            }
+            if (stderr.length > 0) {
+                message = stderr;
+            }
+
+            failures.push(`${planned.sourcePath}: ${message}`);
+            if (config.failFast) {
+                break;
+            }
+            continue;
+        }
+
+        const stagedOutput = stagedInput.replace(/\.(ttf|otf)$/iu, ".woff2");
+        if (!existsSync(stagedOutput)) {
+            failures.push(
+                `${planned.sourcePath}: converter did not produce expected .woff2 output`
+            );
+            if (config.failFast) {
+                break;
+            }
+            continue;
+        }
+
+        mkdirSync(dirname(outputPath), { recursive: true });
+        copyFileSync(stagedOutput, outputPath);
+        convertedTargets.add(outputPath);
+        converted += 1;
+    }
+
+    if (typeof config.indexFile === "string") {
+        const entries = buildIndexEntries(config, plan, convertedTargets);
+        writeIndexFile(config.indexFile, entries);
     }
 
     const summary: RunSummary = {
-        attempted,
-        deleted,
-        dryRun,
-        durationMs: Date.now() - repoStartedAt,
-        failed: failedIds.length,
-        failedIds,
-        matched: runsToProcess.length,
-        planned: candidates.length,
-        repo: resolvedRepo,
-        skippedByExclusion,
-        statuses,
-        skippedByAge,
+        converted,
+        dryRun: config.dryRun,
+        durationMs: Date.now() - startedAt,
+        failed: failures.length,
+        failures,
+        mode: config.mode,
+        outDir: config.outDir,
+        planned: plan.length,
+        skipped: plan.length - converted - failures.length,
+        tempDir: config.tempDir,
     };
 
-    if (!jsonOutput) {
-        if (!quiet) {
-            printTextSummary(summary, styler, unicodeTables);
-            if (dryRun) {
-                printDryRunWorkflowSummary(candidates, styler, unicodeTables);
-            }
-            if (summaryMode) {
-                printSummaryDetails(
-                    runsToProcess,
-                    candidates,
-                    styler,
-                    unicodeTables
-                );
-            }
-        }
-
-        if (dryRun && !quiet) {
-            console.log(styler.ok("Dry run complete: no deletions performed."));
-        }
+    if (typeof config.indexFile === "string") {
+        summary.indexFile = config.indexFile;
     }
 
     return summary;
 }
 
-function printJsonSummaries(
-    repoSummaries: RunSummary[],
-    dryRun: boolean,
-    startedAt: number
-): void {
-    if (repoSummaries.length === 1) {
-        console.log(JSON.stringify(repoSummaries[0], null, 2));
-        return;
+function printTextSummary(summary: RunSummary, verbose: boolean): void {
+    console.log(`Mode: ${summary.mode}${summary.dryRun ? " (dry-run)" : ""}`);
+    console.log(`Planned files: ${summary.planned}`);
+    console.log(`Converted files: ${summary.converted}`);
+    console.log(`Failed files: ${summary.failed}`);
+    console.log(`Skipped files: ${summary.skipped}`);
+    console.log(`Output directory: ${summary.outDir}`);
+
+    if (typeof summary.indexFile === "string") {
+        console.log(`Index file: ${summary.indexFile}`);
     }
 
-    const aggregate = {
-        attempted: repoSummaries.reduce(
-            (accumulator, summary) => accumulator + summary.attempted,
-            0
-        ),
-        deleted: repoSummaries.reduce(
-            (accumulator, summary) => accumulator + summary.deleted,
-            0
-        ),
-        dryRun,
-        durationMs: Date.now() - startedAt,
-        failed: repoSummaries.reduce(
-            (accumulator, summary) => accumulator + summary.failed,
-            0
-        ),
-        matched: repoSummaries.reduce(
-            (accumulator, summary) => accumulator + summary.matched,
-            0
-        ),
-        planned: repoSummaries.reduce(
-            (accumulator, summary) => accumulator + summary.planned,
-            0
-        ),
-        repoCount: repoSummaries.length,
-    };
-
-    console.log(
-        JSON.stringify(
-            {
-                aggregate,
-                repos: repoSummaries,
-            },
-            null,
-            2
-        )
-    );
-}
-
-type ExecutionConfig = {
-    beforeDays: number | undefined;
-    ciMode: boolean;
-    dryRun: boolean;
-    excludedBranchNames: Set<string>;
-    excludedWorkflowNames: Set<string>;
-    failFast: boolean;
-    jsonOutput: boolean;
-    limit: number;
-    maxDelete: number | undefined;
-    maxFailures: number | undefined;
-    maxRetries: number;
-    noProgress: boolean;
-    options: ParsedOptions;
-    order: "oldest" | "newest" | "none";
-    quiet: boolean;
-    retryDelayMs: number;
-    statuses: string[];
-    styler: Styler;
-    summaryMode: boolean;
-    targetRepos: string[];
-    unicodeTables: boolean;
-    verbose: boolean;
-};
-
-function buildExecutionConfig(
-    options: ParsedOptions
-): ExecutionConfig | number {
-    const jsonOutput = options["json"] === true;
-    const ciMode = options["ci"] === true;
-    const noProgress = options["no-progress"] === true;
-
-    let colorOption = "auto";
-    if (ciMode || options["no-color"] === true) {
-        colorOption = "never";
-    } else if (
-        typeof options["color"] === "string" &&
-        options["color"].length > 0
-    ) {
-        colorOption = options["color"].trim().toLowerCase();
-    }
-
-    const validColorOption =
-        colorOption === "auto" ||
-        colorOption === "always" ||
-        colorOption === "never";
-
-    const colorMode = (validColorOption ? colorOption : "auto") as ColorMode;
-    const styler = createStyler(shouldUseColor(colorMode, jsonOutput));
-
-    if (options["help"] === true) {
-        console.log(renderHelpText(styler));
-        return 0;
-    }
-
-    if (!validColorOption) {
-        return emitError(
-            "--color must be one of: auto, always, never.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const dryRun = options["dry-run"] === true;
-    const confirm = options["confirm"] === true || options["yes"] === true;
-    const verbose = options["verbose"] === true;
-    const summaryMode = options["summary"] === true;
-    const quiet = options["quiet"] === true;
-    const failFast = options["fail-fast"] === true;
-
-    let unicodeOption = "auto";
-    if (ciMode || options["no-unicode"] === true) {
-        unicodeOption = "never";
-    } else if (
-        typeof options["unicode"] === "string" &&
-        options["unicode"].length > 0
-    ) {
-        unicodeOption = options["unicode"].trim().toLowerCase();
-    }
-
-    if (
-        unicodeOption !== "auto" &&
-        unicodeOption !== "always" &&
-        unicodeOption !== "never"
-    ) {
-        return emitError(
-            "--unicode must be one of: auto, always, never.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const unicodeMode = unicodeOption as UnicodeMode;
-    const unicodeTables = shouldUseUnicode(unicodeMode, jsonOutput);
-
-    if (!dryRun && !confirm) {
-        return emitError(
-            "Safety stop: pass --confirm to perform deletion, or use --dry-run to preview.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const allStatuses = options["all-statuses"] === true;
-
-    const excludedWorkflowNames = new Set(
-        collectStringListOption(options, "exclude-workflow").map((value) =>
-            value.toLowerCase()
-        )
-    );
-    const excludedBranchNames = new Set(
-        collectStringListOption(options, "exclude-branch").map((value) =>
-            value.toLowerCase()
-        )
-    );
-
-    let rawStatusValues: string[];
-    if (allStatuses) {
-        rawStatusValues = [Array.from(VALID_STATUSES).join(",")];
-    } else if (Array.isArray(options["status"])) {
-        rawStatusValues = options["status"];
-    } else if (typeof options["status"] === "string") {
-        rawStatusValues = [options["status"]];
-    } else {
-        rawStatusValues = ["failure,cancelled"];
-    }
-
-    const statuses = rawStatusValues
-        .flatMap((part) => part.split(","))
-        .map((part) => part.trim())
-        .filter(Boolean);
-
-    if (statuses.length === 0) {
-        return emitError(
-            "at least one --status value is required.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const invalidStatuses = statuses.filter(
-        (status) => !VALID_STATUSES.has(status)
-    );
-    if (invalidStatuses.length > 0) {
-        return emitError(
-            `invalid statuses: ${invalidStatuses.join(", ")}. Valid values: ${Array.from(VALID_STATUSES).join(", ")}`,
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const limit = Number.parseInt(String(options["limit"] ?? "500"), 10);
-    if (!Number.isFinite(limit) || limit < 1) {
-        return emitError(
-            "--limit must be a positive integer.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const maxDeleteOption = options["max-delete"];
-    const maxDelete =
-        typeof maxDeleteOption === "string"
-            ? Number.parseInt(maxDeleteOption, 10)
-            : undefined;
-    if (
-        maxDeleteOption !== undefined &&
-        (typeof maxDelete !== "number" ||
-            !Number.isFinite(maxDelete) ||
-            maxDelete < 1)
-    ) {
-        return emitError(
-            "--max-delete must be a positive integer.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const beforeDaysOption = options["before-days"];
-    const beforeDays =
-        typeof beforeDaysOption === "string"
-            ? Number.parseInt(beforeDaysOption, 10)
-            : undefined;
-    if (
-        beforeDaysOption !== undefined &&
-        (typeof beforeDays !== "number" ||
-            !Number.isFinite(beforeDays) ||
-            beforeDays < 0)
-    ) {
-        return emitError(
-            "--before-days must be a non-negative integer.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const maxRetriesOption = options["max-retries"];
-    const maxRetries =
-        typeof maxRetriesOption === "string"
-            ? Number.parseInt(maxRetriesOption, 10)
-            : 2;
-    if (!Number.isFinite(maxRetries) || maxRetries < 0) {
-        return emitError(
-            "--max-retries must be a non-negative integer.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const retryDelayOption = options["retry-delay-ms"];
-    const retryDelayMs =
-        typeof retryDelayOption === "string"
-            ? Number.parseInt(retryDelayOption, 10)
-            : 200;
-    if (!Number.isFinite(retryDelayMs) || retryDelayMs < 0) {
-        return emitError(
-            "--retry-delay-ms must be a non-negative integer.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const maxFailuresOption = options["max-failures"];
-    const maxFailures =
-        typeof maxFailuresOption === "string"
-            ? Number.parseInt(maxFailuresOption, 10)
-            : undefined;
-    if (
-        maxFailuresOption !== undefined &&
-        (typeof maxFailures !== "number" ||
-            !Number.isFinite(maxFailures) ||
-            maxFailures < 1)
-    ) {
-        return emitError(
-            "--max-failures must be a positive integer.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const orderOption = options["order"];
-    const order =
-        typeof orderOption === "string" && orderOption.length > 0
-            ? orderOption.toLowerCase()
-            : "oldest";
-    if (order !== "oldest" && order !== "newest" && order !== "none") {
-        return emitError(
-            "--order must be one of: oldest, newest, none.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const repoOption =
-        typeof options["repo"] === "string"
-            ? options["repo"].trim()
-            : undefined;
-    const reposOption = collectStringListOption(options, "repos");
-    const allReposMode = options["all-repos"] === true;
-    const ownerOption =
-        typeof options["owner"] === "string" &&
-        options["owner"].trim().length > 0
-            ? options["owner"].trim()
-            : undefined;
-
-    if (
-        allReposMode &&
-        (typeof repoOption === "string" || reposOption.length > 0)
-    ) {
-        return emitError(
-            "--all-repos cannot be combined with --repo or --repos.",
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    const authResult = runGh(["auth", "status"]);
-    if (authResult.status !== 0) {
-        return emitError(
-            "gh CLI is not authenticated. Run: gh auth login",
-            "auth_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    let targetRepos: string[] = [];
-
-    if (allReposMode) {
-        const owner = ownerOption ?? resolveAuthenticatedLogin();
-        if (typeof owner !== "string" || owner.length === 0) {
-            return emitError(
-                "unable to resolve authenticated user for --all-repos. Pass --owner <login>.",
-                "validation_error",
-                jsonOutput,
-                styler
-            );
-        }
-
-        try {
-            targetRepos = listReposForOwner(owner);
-        } catch (error) {
-            const message =
-                error instanceof Error ? error.message : String(error);
-            return emitError(
-                `failed to list repositories: ${message}`,
-                "gh_cli_error",
-                jsonOutput,
-                styler
-            );
-        }
-
-        if (targetRepos.length === 0) {
-            return emitError(
-                `no repositories found for ${owner}.`,
-                "validation_error",
-                jsonOutput,
-                styler
-            );
-        }
-    } else {
-        if (typeof repoOption === "string" && repoOption.length > 0) {
-            targetRepos.push(repoOption);
-        }
-
-        targetRepos.push(...reposOption);
-
-        if (targetRepos.length === 0) {
-            const resolved = resolveRepo(undefined);
-            if (typeof resolved !== "string" || resolved.length === 0) {
-                if (!jsonOutput) {
-                    console.log(printHelp());
-                }
-                return emitError(
-                    "unable to resolve repository. Provide --repo <owner/name> / --repos <owner/name,..> or run inside a GitHub repository.",
-                    "validation_error",
-                    jsonOutput,
-                    styler
-                );
-            }
-
-            targetRepos = [resolved];
+    if (verbose && summary.failures.length > 0) {
+        console.log("");
+        console.log("Failures:");
+        for (const failure of summary.failures) {
+            console.log(`- ${failure}`);
         }
     }
-
-    targetRepos = Array.from(new Set(targetRepos));
-
-    const invalidRepoValues = targetRepos.filter(
-        (repo) => !isValidRepoSlug(repo)
-    );
-    if (invalidRepoValues.length > 0) {
-        return emitError(
-            `invalid repository values: ${invalidRepoValues.join(", ")}. Use owner/name format.`,
-            "validation_error",
-            jsonOutput,
-            styler
-        );
-    }
-
-    options["limit"] = String(limit);
-
-    return {
-        beforeDays,
-        ciMode,
-        dryRun,
-        excludedBranchNames,
-        excludedWorkflowNames,
-        failFast,
-        jsonOutput,
-        limit,
-        maxDelete,
-        maxFailures,
-        maxRetries,
-        noProgress,
-        options,
-        order,
-        quiet,
-        retryDelayMs,
-        statuses,
-        styler,
-        summaryMode,
-        targetRepos,
-        unicodeTables,
-        verbose,
-    };
 }
 
 export function main(argv: string[]): number {
-    const startedAt = Date.now();
     const options = parseArguments(argv);
-    const built = buildExecutionConfig(options);
-    if (typeof built === "number") {
-        return built;
+    const configOrCode = buildExecutionConfig(options);
+
+    if (typeof configOrCode === "number") {
+        return configOrCode;
     }
 
-    const {
-        beforeDays,
-        ciMode,
-        dryRun,
-        excludedBranchNames,
-        excludedWorkflowNames,
-        failFast,
-        jsonOutput,
-        limit,
-        maxDelete,
-        maxFailures,
-        maxRetries,
-        noProgress,
-        options: normalizedOptions,
-        order,
-        quiet,
-        retryDelayMs,
-        statuses,
-        styler,
-        summaryMode,
-        targetRepos,
-        unicodeTables,
-        verbose,
-    } = built;
+    const config = configOrCode;
+    const plan = buildPlan(config);
 
-    const repoSummaries: RunSummary[] = [];
-
-    for (const [repoIndex, resolvedRepo] of targetRepos.entries()) {
-        const result = processRepository({
-            beforeDays,
-            ciMode,
-            dryRun,
-            excludedBranchNames,
-            excludedWorkflowNames,
-            failFast,
-            jsonOutput,
-            limit,
-            maxDelete,
-            maxFailures,
-            maxRetries,
-            noProgress,
-            options: normalizedOptions,
-            order,
-            quiet,
-            repoIndex,
-            repoTotal: targetRepos.length,
-            resolvedRepo,
-            retryDelayMs,
-            statuses,
-            styler,
-            summaryMode,
-            unicodeTables,
-            verbose,
-        });
-
-        if (typeof result === "number") {
-            return result;
+    if (!config.jsonOutput && config.verbose) {
+        for (const planned of plan) {
+            console.log(`${planned.sourcePath} -> ${join(config.outDir, planned.relativeOutputPath)}`);
         }
-
-        repoSummaries.push(result);
+        if (plan.length > 0) {
+            console.log("");
+        }
     }
 
-    if (jsonOutput) {
-        printJsonSummaries(repoSummaries, dryRun, startedAt);
+    const summary = convertFonts(config, plan);
+
+    if (config.jsonOutput) {
+        console.log(JSON.stringify(summary, null, 2));
+    } else {
+        printTextSummary(summary, config.verbose);
     }
 
-    const hasFailures = repoSummaries.some((summary) => summary.failed > 0);
-    return hasFailures ? 2 : 0;
+    return summary.failed > 0 ? 2 : 0;
 }
 
 const isDirectExecution =

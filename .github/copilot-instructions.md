@@ -1,12 +1,12 @@
-# Copilot Instructions for gh-runs-cleanup
+# Copilot Instructions for nerd-font-woff2
 
-This repository is a GitHub CLI extension focused on safe cleanup of workflow runs.
+This repository provides a CLI pipeline for building WOFF2 assets from Nerd Fonts and other TTF/OTF font sources.
 
 ## Core principles
 
-- Safety first: destructive actions must stay opt-in (`--confirm` / `--yes`).
+- Safety first: execution that writes/changes files should remain explicit (`--convert` + `--confirm`).
 - Keep CLI output deterministic and script-friendly.
-- Prefer strict typing and explicit validation.
+- Prefer strict typing and explicit input validation.
 - Minimize runtime dependencies; prefer Node built-ins.
 
 ## Quality checks
@@ -23,7 +23,7 @@ Before finalizing changes, run:
 - Source: `src/`
 - Tests: `test/`
 - Build output: `dist/`
-- Extension entrypoints: `gh-runs-cleanup`, `cleanup-workflow-runs.mjs`
+- Entrypoint wrapper: `nerd-font-woff2`
 
 ## Behavioral expectations
 

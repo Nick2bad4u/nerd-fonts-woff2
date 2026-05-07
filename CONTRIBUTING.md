@@ -1,6 +1,6 @@
-# Contributing to gh-runs-cleanup
+# Contributing to nerd-font-woff2
 
-Thanks for helping improve this GitHub CLI extension.
+Thanks for helping improve this font conversion pipeline.
 
 ## Local setup
 
@@ -12,10 +12,10 @@ npm test
 
 ## Development guidelines
 
-- Keep behavior safe by default (`--confirm` required for destructive actions).
+- Keep behavior safe by default (`--confirm` required for conversion execution).
 - Prefer explicit flags over implicit behavior.
-- Keep output actionable and script-friendly.
-- Add/adjust tests when changing argument parsing, filtering, or exit-code behavior.
+- Keep output deterministic and script-friendly (`--json` compatibility matters).
+- Add/adjust tests when changing argument parsing, conversion flow, or exit codes.
 
 ## Pull requests
 

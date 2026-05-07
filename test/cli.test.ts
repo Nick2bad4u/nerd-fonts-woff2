@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { main } from "../src/cli.js";
@@ -18,137 +21,133 @@ function withSilentConsole<T>(callback: () => T): T {
     }
 }
 
-test("main returns 1 for invalid --repo format", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--repo",
-            "invalid-repo",
-            "--dry-run",
-        ])
-    );
-    assert.equal(code, 1);
-});
-
-test("main returns 1 for invalid status", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--repo",
-            "owner/repo",
-            "--status",
-            "not-real-status",
-        ])
-    );
-
-    assert.equal(code, 1);
-});
-
-test("main returns 1 for invalid limit", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--repo",
-            "owner/repo",
-            "--limit",
-            "0",
-        ])
-    );
-    assert.equal(code, 1);
-});
-
-test("main returns 1 for missing confirm when not dry-run", () => {
-    const code = withSilentConsole(() => main([]));
-    assert.equal(code, 1);
-});
+function createFixtureRoot(): string {
+    return mkdtempSync(join(tmpdir(), "nerd-font-woff2-test-"));
+}
 
 test("main returns 0 for --help", () => {
     const code = withSilentConsole(() => main(["--help"]));
     assert.equal(code, 0);
 });
 
-test("main returns 1 for invalid before-days", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--before-days",
-            "-1",
-            "--dry-run",
-        ])
-    );
+test("main returns 1 when no source directory is provided", () => {
+    const code = withSilentConsole(() => main([]));
     assert.equal(code, 1);
 });
 
-test("main returns 1 for invalid max-retries", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--max-retries",
-            "-1",
-            "--dry-run",
-        ])
-    );
-    assert.equal(code, 1);
+test("main returns 1 for invalid --max-files", () => {
+    const root = createFixtureRoot();
+    const sourceDir = join(root, "fonts");
+    mkdirSync(sourceDir, { recursive: true });
+
+    try {
+        const code = withSilentConsole(() =>
+            main([
+                "--source-dir",
+                sourceDir,
+                "--max-files",
+                "0",
+            ])
+        );
+        assert.equal(code, 1);
+    } finally {
+        rmSync(root, { force: true, recursive: true });
+    }
 });
 
-test("main returns 1 for invalid retry-delay-ms", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--retry-delay-ms",
-            "-1",
-            "--dry-run",
-        ])
-    );
-    assert.equal(code, 1);
+test("main returns 1 when --convert is used without --confirm", () => {
+    const root = createFixtureRoot();
+    const sourceDir = join(root, "fonts");
+    mkdirSync(sourceDir, { recursive: true });
+
+    try {
+        const code = withSilentConsole(() =>
+            main([
+                "--source-dir",
+                sourceDir,
+                "--convert",
+            ])
+        );
+        assert.equal(code, 1);
+    } finally {
+        rmSync(root, { force: true, recursive: true });
+    }
 });
 
-test("main returns 1 for invalid max-failures", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--max-failures",
-            "0",
-            "--dry-run",
-        ])
-    );
-    assert.equal(code, 1);
+test("main returns 0 for dry-run plan with discovered fonts", () => {
+    const root = createFixtureRoot();
+    const sourceDir = join(root, "fonts", "JetBrainsMono");
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(join(sourceDir, "JetBrainsMonoNerdFont-Regular.ttf"), "fake");
+
+    try {
+        const code = withSilentConsole(() =>
+            main([
+                "--source-dir",
+                join(root, "fonts"),
+                "--dry-run",
+            ])
+        );
+        assert.equal(code, 0);
+    } finally {
+        rmSync(root, { force: true, recursive: true });
+    }
 });
 
-test("main returns 1 for invalid order", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--order",
-            "sideways",
-            "--dry-run",
-        ])
-    );
-    assert.equal(code, 1);
-});
+test("main converts a font when using a custom converter command", () => {
+    const root = createFixtureRoot();
+    const sourceDir = join(root, "fonts", "FiraCode");
+    const outDir = join(root, "out");
+    const tempDir = join(root, "temp");
+    const indexFile = join(root, "index", "fonts.json");
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(join(sourceDir, "FiraCodeNerdFont-Regular.ttf"), "fake");
 
-test("main returns 1 for invalid color mode", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--color",
-            "rainbow",
-            "--dry-run",
-        ])
+    const fakeConverter = join(root, "fake-converter.mjs");
+    writeFileSync(
+        fakeConverter,
+        [
+            'import { copyFileSync } from "node:fs";',
+            'const input = process.argv.at(-1);',
+            'if (typeof input !== "string" || input.length === 0) {',
+            "  process.exit(1);",
+            "}",
+            String.raw`const output = input.replace(/\.(ttf|otf)$/iu, ".woff2");`,
+            "copyFileSync(input, output);",
+        ].join("\n")
     );
-    assert.equal(code, 1);
-});
 
-test("main returns 1 for invalid unicode mode", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--unicode",
-            "emoji",
-            "--dry-run",
-        ])
-    );
-    assert.equal(code, 1);
-});
+    try {
+        const code = withSilentConsole(() =>
+            main([
+                "--source-dir",
+                join(root, "fonts"),
+                "--convert",
+                "--confirm",
+                "--converter",
+                process.execPath,
+                "--converter-arg",
+                fakeConverter,
+                "--out-dir",
+                outDir,
+                "--temp-dir",
+                tempDir,
+                "--index-file",
+                indexFile,
+            ])
+        );
 
-test("main returns 1 when --all-repos is combined with --repo", () => {
-    const code = withSilentConsole(() =>
-        main([
-            "--all-repos",
-            "--repo",
-            "owner/repo",
-            "--dry-run",
-        ])
-    );
-    assert.equal(code, 1);
+        assert.equal(code, 0);
+
+        const indexContent = readFileSync(indexFile, "utf8");
+        assert.ok(indexContent.includes("FiraCodeNerdFont-Regular.woff2"));
+
+        const parsedIndex = JSON.parse(indexContent) as Array<{ outputPath: string }>;
+        assert.equal(parsedIndex.length, 1);
+        const [firstEntry] = parsedIndex;
+        assert.ok(firstEntry);
+        assert.ok(existsSync(firstEntry.outputPath));
+    } finally {
+        rmSync(root, { force: true, recursive: true });
+    }
 });
