@@ -43,8 +43,8 @@ body:
           label: Project version
           placeholder: 0.1.0
 
-        - type: input
-            id: node-version
+    - type: input
+      id: node-version
       attributes:
           label: Node.js version
           placeholder: node -v output

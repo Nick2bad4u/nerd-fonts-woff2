@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import {
+    mkdtempSync,
+    mkdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+    existsSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -108,7 +115,7 @@ test("main converts a font when using a custom converter command", () => {
         fakeConverter,
         [
             'import { copyFileSync } from "node:fs";',
-            'const input = process.argv.at(-1);',
+            "const input = process.argv.at(-1);",
             'if (typeof input !== "string" || input.length === 0) {',
             "  process.exit(1);",
             "}",
@@ -142,7 +149,9 @@ test("main converts a font when using a custom converter command", () => {
         const indexContent = readFileSync(indexFile, "utf8");
         assert.ok(indexContent.includes("FiraCodeNerdFont-Regular.woff2"));
 
-        const parsedIndex = JSON.parse(indexContent) as Array<{ outputPath: string }>;
+        const parsedIndex = JSON.parse(indexContent) as Array<{
+            outputPath: string;
+        }>;
         assert.equal(parsedIndex.length, 1);
         const [firstEntry] = parsedIndex;
         assert.ok(firstEntry);

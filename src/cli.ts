@@ -1,12 +1,35 @@
 #!/usr/bin/env node
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, normalize, relative, resolve } from "node:path";
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    statSync,
+    writeFileSync,
+} from "node:fs";
+import {
+    basename,
+    dirname,
+    extname,
+    join,
+    normalize,
+    relative,
+    resolve,
+} from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { printHelp } from "./cli-help.js";
-import { type ErrorCategory, type FontIndexEntry, type Mode, type ParsedOptions, type PlannedFontFile, type RunSummary } from "./cli-types.js";
+import {
+    type ErrorCategory,
+    type FontIndexEntry,
+    type Mode,
+    type ParsedOptions,
+    type PlannedFontFile,
+    type RunSummary,
+} from "./cli-types.js";
 
 type ExecutionConfig = {
     confirm: boolean;
@@ -138,7 +161,10 @@ function collectListOption(options: ParsedOptions, key: string): string[] {
     return [];
 }
 
-function getStringOption(options: ParsedOptions, key: string): string | undefined {
+function getStringOption(
+    options: ParsedOptions,
+    key: string
+): string | undefined {
     const value = options[key];
     if (typeof value !== "string") {
         return undefined;
@@ -166,7 +192,9 @@ function parseManifest(pathToManifest: string): ManifestFile {
             return undefined;
         }
 
-        const entries = value.filter((entry): entry is string => typeof entry === "string");
+        const entries = value.filter(
+            (entry): entry is string => typeof entry === "string"
+        );
         return entries.length === value.length ? entries : undefined;
     };
 
@@ -233,7 +261,9 @@ function normalizeExtList(entries: string[]): Set<string> {
     return new Set(normalized);
 }
 
-function buildExecutionConfig(options: ParsedOptions): ExecutionConfig | number {
+function buildExecutionConfig(
+    options: ParsedOptions
+): ExecutionConfig | number {
     const jsonOutput = options["json"] === true;
 
     if (options["help"] === true) {
@@ -248,7 +278,8 @@ function buildExecutionConfig(options: ParsedOptions): ExecutionConfig | number 
         try {
             manifest = parseManifest(resolve(manifestPath));
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message =
+                error instanceof Error ? error.message : String(error);
             return emitError(
                 `failed to read --manifest file: ${message}`,
                 "validation_error",
@@ -322,7 +353,9 @@ function buildExecutionConfig(options: ParsedOptions): ExecutionConfig | number 
 
     const maxFilesRaw =
         getStringOption(options, "max-files") ??
-        (typeof manifest.maxFiles === "number" ? String(manifest.maxFiles) : undefined);
+        (typeof manifest.maxFiles === "number"
+            ? String(manifest.maxFiles)
+            : undefined);
     const maxFiles =
         typeof maxFilesRaw === "string"
             ? Number.parseInt(maxFilesRaw, 10)
@@ -340,20 +373,18 @@ function buildExecutionConfig(options: ParsedOptions): ExecutionConfig | number 
     }
 
     const outDir = resolve(
-        getStringOption(options, "out-dir") ??
-            manifest.outDir ??
-            "assets/woff2"
+        getStringOption(options, "out-dir") ?? manifest.outDir ?? "assets/woff2"
     );
     const tempDir = resolve(
-        getStringOption(options, "temp-dir") ??
-            manifest.tempDir ??
-            "temp/work"
+        getStringOption(options, "temp-dir") ?? manifest.tempDir ?? "temp/work"
     );
     const indexFile =
         getStringOption(options, "index-file") ?? manifest.indexFile;
 
     const converter =
-        getStringOption(options, "converter") ?? manifest.converter ?? "woff2_compress";
+        getStringOption(options, "converter") ??
+        manifest.converter ??
+        "woff2_compress";
     if (converter.trim().length === 0) {
         return emitError(
             "--converter must be a non-empty command.",
@@ -403,8 +434,8 @@ function listFontFiles(sourceDir: string, includeExts: Set<string>): string[] {
             continue;
         }
 
-        const entries = readdirSync(current, { withFileTypes: true }).sort((a, b) =>
-            a.name.localeCompare(b.name)
+        const entries = readdirSync(current, { withFileTypes: true }).sort(
+            (a, b) => a.name.localeCompare(b.name)
         );
 
         for (const entry of entries) {
@@ -439,7 +470,9 @@ function buildPlan(config: ExecutionConfig): PlannedFontFile[] {
         const sourceRoot = basename(sourceDir);
 
         for (const sourcePath of files) {
-            const relativeInputPath = normalize(relative(sourceDir, sourcePath));
+            const relativeInputPath = normalize(
+                relative(sourceDir, sourcePath)
+            );
             const relativeOutputPath = normalize(
                 join(
                     sourceRoot,
@@ -480,10 +513,13 @@ function buildIndexEntries(
     const entries: FontIndexEntry[] = [];
 
     for (const planned of plan) {
-        const outputPath = resolve(join(config.outDir, planned.relativeOutputPath));
+        const outputPath = resolve(
+            join(config.outDir, planned.relativeOutputPath)
+        );
         const converted = convertedTargets.has(outputPath);
 
-        const firstSegment = planned.relativeOutputPath.split(/[\\/]/u)[0] ?? "unknown";
+        const firstSegment =
+            planned.relativeOutputPath.split(/[\\/]/u)[0] ?? "unknown";
 
         let sizeBytes: number | null = null;
         if (existsSync(outputPath)) {
@@ -503,7 +539,10 @@ function buildIndexEntries(
     return entries;
 }
 
-function convertFonts(config: ExecutionConfig, plan: PlannedFontFile[]): RunSummary {
+function convertFonts(
+    config: ExecutionConfig,
+    plan: PlannedFontFile[]
+): RunSummary {
     const startedAt = Date.now();
 
     let converted = 0;
@@ -516,22 +555,33 @@ function convertFonts(config: ExecutionConfig, plan: PlannedFontFile[]): RunSumm
     }
 
     for (const planned of plan) {
-        const outputPath = resolve(join(config.outDir, planned.relativeOutputPath));
+        const outputPath = resolve(
+            join(config.outDir, planned.relativeOutputPath)
+        );
 
         if (config.mode !== "convert" || config.dryRun) {
             continue;
         }
 
         const stagedInput = resolve(
-            join(config.tempDir, "staging", planned.sourceRoot, planned.relativeInputPath)
+            join(
+                config.tempDir,
+                "staging",
+                planned.sourceRoot,
+                planned.relativeInputPath
+            )
         );
         mkdirSync(dirname(stagedInput), { recursive: true });
         copyFileSync(planned.sourcePath, stagedInput);
 
-        const commandResult = spawnSync(config.converter, [...config.converterArgs, stagedInput], {
-            encoding: "utf8",
-            shell: false,
-        });
+        const commandResult = spawnSync(
+            config.converter,
+            [...config.converterArgs, stagedInput],
+            {
+                encoding: "utf8",
+                shell: false,
+            }
+        );
 
         if (commandResult.status !== 0) {
             const stderr = commandResult.stderr.trim();
@@ -627,7 +677,9 @@ export function main(argv: string[]): number {
 
     if (!config.jsonOutput && config.verbose) {
         for (const planned of plan) {
-            console.log(`${planned.sourcePath} -> ${join(config.outDir, planned.relativeOutputPath)}`);
+            console.log(
+                `${planned.sourcePath} -> ${join(config.outDir, planned.relativeOutputPath)}`
+            );
         }
         if (plan.length > 0) {
             console.log("");
