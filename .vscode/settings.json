@@ -62,7 +62,7 @@
     },
     "sonarlint.connectedMode.project": {
         "connectionId": "nick2bad4u",
-        "projectKey": "Nick2bad4u_Uptime-Watcher"
+        "projectKey": "Nick2bad4u_nerd-fonts-woff2"
     },
     "sonarlint.pathsToExclude": [
         "**/node_modules/**",
@@ -70,5 +70,5 @@
         "**/coverage/**"
     ],
     "strykerMutator.enable": false,
-    "vitest.rootConfig": "c:\\repos\\nerd-fonts-woff2\\vite.config.ts"
+    "vitest.rootConfig": "c:\\Repos\\nerd-fonts-woff2\\vite.config.ts"
 }

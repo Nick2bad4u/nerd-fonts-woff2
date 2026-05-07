@@ -12,14 +12,27 @@ const indexFile = resolve(outputRoot, "index.json");
 const cliFile = resolve(repoRoot, "dist", "src", "cli.js");
 
 /**
+ * Absolute path to the Node.js WOFF2 converter shim bundled with this project.
+ * Uses the ttf2woff2 npm package — no system installation required.
+ */
+const defaultConverterScript = resolve(
+    repoRoot,
+    "scripts",
+    "node-woff2-compress.mjs"
+);
+
+/**
  * Parse script options.
  *
  * Supported flags:
  *
  * - --dry-run
  * - --verbose
- * - --converter command
- * - --converter-arg value (repeatable)
+ * - --converter command (default: node)
+ * - --converter-arg value (default: path to node-woff2-compress.mjs; repeatable)
+ *
+ * The default converter is the bundled Node.js shim that uses the ttf2woff2 npm
+ * package — no system woff2 installation required.
  *
  * @returns {{
  *     converter: string;
@@ -29,8 +42,8 @@ const cliFile = resolve(repoRoot, "dist", "src", "cli.js");
  * }}
  */
 function parseScriptOptions() {
-    let converter = "woff2_compress";
-    const converterArgs = [];
+    let converter = process.execPath;
+    const converterArgs = [defaultConverterScript];
     let dryRun = false;
     let verbose = false;
 
@@ -77,25 +90,6 @@ function parseScriptOptions() {
 }
 
 /**
- * Ensure the converter command exists on PATH.
- *
- * @param {string} converter
- *
- * @returns {void}
- */
-function ensureConverterAvailable(converter) {
-    const probe = spawnSync(converter, ["--help"], {
-        stdio: "ignore",
-    });
-
-    if (probe.error instanceof Error) {
-        throw new Error(
-            `Converter '${converter}' not found on PATH. Install woff2 tools or pass --converter <command>.`
-        );
-    }
-}
-
-/**
  * Resolve all top-level font family source directories.
  *
  * @returns {string[]}
@@ -125,10 +119,6 @@ function main() {
         throw new Error(
             `Built CLI entrypoint not found at ${cliFile}. Run npm run build first.`
         );
-    }
-
-    if (!options.dryRun) {
-        ensureConverterAvailable(options.converter);
     }
 
     const sourceDirs = getSourceDirectories();
