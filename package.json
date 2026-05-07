@@ -2,7 +2,7 @@
     "$schema": "https://www.schemastore.org/package.json",
     "name": "nerd-font-woff2",
     "version": "1.0.0",
-    "private": true,
+    "private": false,
     "description": "CLI pipeline for converting Nerd Fonts (and other fonts) from TTF/OTF to WOFF2 assets.",
     "keywords": [
         "fonts",
@@ -20,21 +20,48 @@
         "url": "git+https://github.com/Nick2bad4u/nerd-fonts-woff2.git"
     },
     "license": "MIT",
-    "author": "Nick2bad4u <20943337+Nick2bad4u@users.noreply.github.com> (https://github.com/Nick2bad4u)",
+    "author": {
+        "name": "Nick2bad4u",
+        "email": "20943337+Nick2bad4u@users.noreply.github.com",
+        "url": "https://github.com/Nick2bad4u"
+    },
+    "contributors": [
+        {
+            "name": "Nick2bad4u",
+            "email": "20943337+Nick2bad4u@users.noreply.github.com",
+            "url": "https://github.com/Nick2bad4u"
+        }
+    ],
+    "sideEffects": false,
     "type": "module",
+    "exports": {
+        ".": {
+            "import": "./dist/src/cli.js",
+            "types": "./dist/src/cli.d.ts"
+        }
+    },
+    "main": "./dist/src/cli.js",
+    "types": "./dist/src/cli.d.ts",
     "bin": {
         "nerd-font-woff2": "./nerd-font-woff2"
     },
     "files": [
         "nerd-font-woff2",
         "dist",
-        "assets",
+        "fonts",
         "README.md",
         "LICENSE"
     ],
     "scripts": {
+        "assets:generate": "npm run fonts:convert",
+        "assets:plan": "npm run fonts:plan",
         "build": "tsc -p tsconfig.json",
         "dev": "node ./src/cli.ts",
+        "fonts:convert": "npm run build && node ./scripts/convert-font-assets.mjs",
+        "fonts:download": "node ./scripts/download-nerd-fonts-sources.mjs",
+        "fonts:local": "npm run fonts:download && npm run fonts:convert && npm run fonts:verify",
+        "fonts:plan": "npm run build && node ./scripts/convert-font-assets.mjs --dry-run",
+        "fonts:verify": "node ./scripts/verify-font-assets.mjs",
         "format": "prettier . --write",
         "format:check": "prettier . --check",
         "lint": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache",
@@ -47,13 +74,20 @@
         "release:check": "npm run lint:all && npm test",
         "start": "node ./src/cli.ts",
         "sync:node-version-files": "node scripts/sync-node-version-files.mjs",
-        "test": "npm run build && node --test dist/test/**/*.test.js",
-        "typecheck": "tsc -p tsconfig.json --noEmit",
-        "update-deps": "npx ncu -i --install never && npm run sync:node-version-files && npm install --force"
+        "test": "vitest run --config vite.config.ts",
+        "test:ci": "vitest run --config vite.config.ts --coverage --reporter=github-actions --reporter=dot --reporter=junit --outputFile=test-report.junit.xml --silent",
+        "test:coverage": "vitest run --config vite.config.ts --coverage",
+        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.eslint.json --noEmit && tsc -p tsconfig.js.json --noEmit",
+        "update-deps": "npx ncu -i --install never && npm run sync:node-version-files && npm update --all --force && npm install --force"
+    },
+    "dependencies": {
+        "ts-extras": "^1.0.0",
+        "type-fest": "^5.6.0"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@types/node": "^25.6.0",
+        "@vitest/coverage-v8": "^4.0.7",
         "eslint": "^10.3.0",
         "eslint-config-nick2bad4u": "^1.0.11",
         "globals": "^17.6.0",
@@ -66,13 +100,25 @@
         "secretlint-config-nick2bad4u": "^1.0.4",
         "stylelint": "^17.11.0",
         "stylelint-config-nick2bad4u": "^1.0.9",
-        "typescript": "^6.0.3"
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.59.1",
+        "vitest": "^4.0.7"
     },
     "packageManager": "npm@11.14.0",
     "engines": {
         "node": ">=22.18.0"
     },
+    "devEngines": {
+        "packageManager": {
+            "name": "npm",
+            "version": ">=10.0.0"
+        },
+        "runtime": {
+            "name": "node",
+            "version": ">=22.18.0"
+        }
+    },
     "publishConfig": {
-        "access": "public"
+        "registry": "https://registry.npmjs.org"
     }
 }

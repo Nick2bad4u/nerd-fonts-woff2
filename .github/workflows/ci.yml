@@ -1,27 +1,59 @@
-name: CI
+name: Continuous Integration
+
+run-name: Continuous Integration • ${{ github.ref_name }} @${{ github.actor }}
+
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 on:
     push:
         branches:
             - main
     pull_request:
+    merge_group:
+        types:
+            - checks_requested
 
 permissions:
     contents: read
 
 jobs:
-    validate:
-        runs-on: ubuntu-latest
+    test:
+        name: Test (${{ matrix.label }})
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 60
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: true
+            matrix:
+                include:
+                    - label: linux
+                      os: ubuntu-latest
+                      codecov_flag: os-linux
+                    - label: windows
+                      os: windows-latest
+                      codecov_flag: os-windows
+                    - label: macos
+                      os: macos-latest
+                      codecov_flag: os-macos
+        defaults:
+            run:
+                shell: bash
+
         steps:
             - name: Harden the runner (Audit all outbound calls)
+              if: ${{ matrix.os == 'ubuntu-latest' }}
               uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
               with:
                   egress-policy: audit
 
-            - name: Checkout
+            - name: Checkout repository
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-            - name: Setup Node
+            - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
               with:
                   node-version-file: .node-version
@@ -29,13 +61,52 @@ jobs:
                   cache-dependency-path: package-lock.json
 
             - name: Install dependencies
-              run: npm ci
+              run: npm ci --ignore-scripts
 
-            - name: Lint
-              run: npm run lint
+            - name: Build package
+              run: npm run build
 
             - name: Typecheck
               run: npm run typecheck
 
-            - name: Test
-              run: npm test
+            - name: Lint
+              run: npm run lint
+
+            - name: Run tests with coverage and JUnit report
+              run: npm run test:ci
+              env:
+                  CI: "true"
+
+            - name: Verify coverage artifact
+              run: python -c "from pathlib import Path; assert Path('coverage/lcov.info').is_file(), 'coverage/lcov.info was not generated'"
+
+            - name: Verify JUnit artifact
+              run: python -c "from pathlib import Path; assert Path('test-report.junit.xml').is_file(), 'test-report.junit.xml was not generated'"
+
+            - name: Upload test results to Codecov
+              if: ${{ !cancelled() }}
+              uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+              with:
+                  use_oidc: true
+                  slug: ${{ github.repository }}
+                  files: test-report.junit.xml
+                  flags: ${{ matrix.codecov_flag }}
+                  name: vitest-junit-${{ matrix.codecov_flag }}
+                  report_type: test_results
+                  fail_ci_if_error: true
+                  disable_search: true
+                  verbose: true
+
+            - name: Upload coverage to Codecov
+              if: ${{ !cancelled() }}
+              uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+              with:
+                  use_oidc: true
+                  slug: ${{ github.repository }}
+                  files: ./coverage/lcov.info
+                  flags: ${{ matrix.codecov_flag }}
+                  name: vitest-unit-coverage-${{ matrix.codecov_flag }}
+                  report_type: coverage
+                  fail_ci_if_error: true
+                  disable_search: true
+                  verbose: true
