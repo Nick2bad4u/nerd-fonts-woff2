@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Fast in-process bulk WOFF2 converter for Nerd Fonts.
+ * Parallel WOFF2 bulk converter for Nerd Fonts.
  *
- * Loads ttf2woff2 once and converts all TTF/OTF source files in a single
- * Node.js process \u2014 no per-font process startup overhead.
+ * Converts all TTF/OTF source files to WOFF2 using a pool of Worker threads.
+ * Each conversion runs in an isolated thread with a per-font timeout so a hung
+ * or crashing font never stalls the whole run.
  *
  * Reads: fonts/original/** /_.{ttf,otf} Writes: fonts/woff2/** /_.woff2
- * (mirroring the source tree) fonts/woff2/index.json (FontIndexEntry array)
+ * (mirrors the source tree) fonts/woff2/index.json (FontIndexEntry array)
  *
  * Skips already-up-to-date files unless --force is passed.
  *
@@ -19,22 +20,28 @@
 import {
     existsSync,
     mkdirSync,
-    readFileSync,
     readdirSync,
     statSync,
     writeFileSync,
 } from "node:fs";
+import { cpus } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-
-import ttf2woff2 from "ttf2woff2";
+import { Worker } from "node:worker_threads";
 
 const repoRoot = process.cwd();
 const sourceRoot = resolve(repoRoot, "fonts", "original");
 const outputRoot = resolve(repoRoot, "fonts", "woff2");
 const indexFile = resolve(outputRoot, "index.json");
+const workerScript = new URL("./woff2-convert-worker.mjs", import.meta.url);
 
 const dryRun = process.argv.includes("--dry-run");
 const force = process.argv.includes("--force");
+
+/** Maximum parallel conversions. Cap at 4 to avoid excessive memory use. */
+const CONCURRENCY = Math.min(cpus().length, 4);
+
+/** Kill a worker if a single font takes longer than this. */
+const FONT_TIMEOUT_MS = 30_000;
 
 /**
  * @typedef {{
@@ -52,7 +59,7 @@ const force = process.argv.includes("--force");
  *
  * @param {string} directory - Root directory to walk.
  *
- * @returns {string[]} - Absolute paths to matching font files.
+ * @returns {string[]} Absolute paths to matching font files.
  */
 function collectSourceFonts(directory) {
     /** @type {string[]} */
@@ -79,11 +86,11 @@ function collectSourceFonts(directory) {
 }
 
 /**
- * Convert a source font path to its expected WOFF2 output path.
+ * Derive the WOFF2 output path that mirrors the source tree.
  *
- * @param {string} sourcePath - Absolute path to the source .ttf or .otf file.
+ * @param {string} sourcePath
  *
- * @returns {string} - Absolute path to the target .woff2 file.
+ * @returns {string}
  */
 function toOutputPath(sourcePath) {
     const rel = relative(sourceRoot, sourcePath);
@@ -91,26 +98,23 @@ function toOutputPath(sourcePath) {
 }
 
 /**
- * Extract the Nerd Fonts family name from a source path. The family is the
- * first path segment under fonts/original.
+ * Extract the top-level family name (first path segment under fonts/original).
  *
- * @param {string} sourcePath - Absolute path to the source font.
+ * @param {string} sourcePath
  *
  * @returns {string}
  */
 function extractFamily(sourcePath) {
     const rel = relative(sourceRoot, sourcePath);
-    const firstSegment = rel.split(/[\\/]/u)[0];
-    return typeof firstSegment === "string" && firstSegment.length > 0
-        ? firstSegment
-        : "Unknown";
+    const first = rel.split(/[\\/]/u)[0];
+    return typeof first === "string" && first.length > 0 ? first : "Unknown";
 }
 
 /**
- * Check whether an existing output file is already up-to-date.
+ * Return true if the output file exists and is newer than the source.
  *
- * @param {string} outputPath - Target .woff2 file path.
- * @param {string} sourcePath - Source .ttf/.otf file path.
+ * @param {string} outputPath
+ * @param {string} sourcePath
  *
  * @returns {boolean}
  */
@@ -119,77 +123,237 @@ function isUpToDate(outputPath, sourcePath) {
         return false;
     }
 
-    const sourceMtime = statSync(sourcePath).mtimeMs;
-    const outputMtime = statSync(outputPath).mtimeMs;
-    return outputMtime >= sourceMtime;
+    return statSync(outputPath).mtimeMs >= statSync(sourcePath).mtimeMs;
 }
 
 /**
- * Convert a single font file and return the index entry.
+ * Convert one font in a dedicated Worker thread.
  *
- * @param {string} sourcePath - Absolute source font path.
- * @param {string} outputPath - Absolute target woff2 path.
+ * Always resolves (never rejects) — failures are surfaced via `ok: false`. A
+ * hung worker is terminated after FONT_TIMEOUT_MS.
  *
- * @returns {{ entry: FontIndexEntry; skipped: boolean }}
+ * @param {string} sourcePath
+ * @param {string} outputPath
+ *
+ * @returns {Promise<{ error?: string; ok: boolean; sizeBytes?: number }>}
  */
-function convertFont(sourcePath, outputPath) {
-    const family = extractFamily(sourcePath);
-    const fileName = outputPath.split(/[\\/]/u).at(-1) ?? "";
+function convertInWorker(sourcePath, outputPath) {
+    return new Promise((resolvePromise) => {
+        const worker = new Worker(workerScript, {
+            workerData: { outputPath, sourcePath },
+        });
 
-    if (!force && isUpToDate(outputPath, sourcePath)) {
-        const sizeBytes = statSync(outputPath).size;
-        return {
-            entry: {
+        let settled = false;
+
+        // Declare timer before settle so settle can reference it without
+        // triggering the no-use-before-define rule.
+        /** @type {ReturnType<typeof setTimeout>} */
+        let timer;
+
+        /**
+         * @param {{ error?: string; ok: boolean; sizeBytes?: number }} result
+         */
+        function settle(result) {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            clearTimeout(timer);
+            resolvePromise(result);
+        }
+
+        timer = setTimeout(() => {
+            worker.terminate().catch(() => undefined);
+            settle({
+                error: `timed out after ${FONT_TIMEOUT_MS / 1000}s`,
+                ok: false,
+            });
+        }, FONT_TIMEOUT_MS);
+
+        worker.once(
+            "message",
+            (
+                /**
+                 * @type {{
+                 *     ok: boolean;
+                 *     sizeBytes?: number;
+                 *     error?: string;
+                 * }}
+                 */ msg
+            ) => {
+                settle(msg);
+            }
+        );
+
+        worker.once("error", (err) => {
+            worker.terminate().catch(() => undefined);
+            settle({
+                error: err instanceof Error ? err.message : String(err),
+                ok: false,
+            });
+        });
+
+        worker.once("exit", (code) => {
+            if (code !== 0) {
+                settle({ error: `worker exited with code ${code}`, ok: false });
+            }
+        });
+    });
+}
+
+/**
+ * Print a progress line every 50 fonts or at the final font.
+ *
+ * @param {number} completed
+ * @param {number} total
+ *
+ * @returns {void}
+ */
+function printProgress(completed, total) {
+    if (completed % 50 === 0 || completed === total) {
+        const pct = Math.round((completed / total) * 100);
+        process.stdout.write(`  ${completed}/${total} (${pct}%)\n`);
+    }
+}
+
+/**
+ * Run conversions for all fonts up to CONCURRENCY at a time.
+ *
+ * @param {readonly string[]} sourceFonts
+ *
+ * @returns {Promise<{
+ *     converted: number;
+ *     entries: FontIndexEntry[];
+ *     failed: number;
+ *     failures: string[];
+ *     skipped: number;
+ * }>}
+ */
+async function runConversionLoop(sourceFonts) {
+    /** @type {(FontIndexEntry | undefined)[]} */
+    const entries = new Array(sourceFonts.length);
+    /** @type {string[]} */
+    const failures = [];
+    let converted = 0;
+    let skipped = 0;
+    let failed = 0;
+    let completed = 0;
+
+    /**
+     * Process a single font and store the result at its original index slot.
+     *
+     * @param {string} sourcePath
+     * @param {number} index
+     *
+     * @returns {Promise<void>}
+     */
+    async function processFont(sourcePath, index) {
+        const outputPath = toOutputPath(sourcePath);
+        const family = extractFamily(sourcePath);
+        const fileName = outputPath.split(/[\\/]/u).at(-1) ?? "";
+
+        // Already up to date — skip without converting
+        if (!force && isUpToDate(outputPath, sourcePath)) {
+            entries[index] = {
                 converted: false,
                 family,
                 fileName,
                 outputPath,
-                sizeBytes,
+                sizeBytes: statSync(outputPath).size,
                 sourcePath,
-            },
-            skipped: true,
-        };
-    }
+            };
+            skipped += 1;
+            completed += 1;
+            printProgress(completed, sourceFonts.length);
+            return;
+        }
 
-    if (dryRun) {
-        return {
-            entry: {
+        // Dry-run: record intent without writing files
+        if (dryRun) {
+            entries[index] = {
                 converted: false,
                 family,
                 fileName,
                 outputPath,
                 sizeBytes: null,
                 sourcePath,
-            },
-            skipped: false,
-        };
+            };
+            converted += 1;
+            completed += 1;
+            printProgress(completed, sourceFonts.length);
+            return;
+        }
+
+        const result = await convertInWorker(sourcePath, outputPath);
+
+        if (result.ok) {
+            entries[index] = {
+                converted: true,
+                family,
+                fileName,
+                outputPath,
+                sizeBytes: result.sizeBytes ?? null,
+                sourcePath,
+            };
+            converted += 1;
+        } else {
+            const message = result.error ?? "unknown error";
+            entries[index] = {
+                converted: false,
+                family,
+                fileName,
+                outputPath,
+                sizeBytes: null,
+                sourcePath,
+            };
+            failures.push(`${sourcePath}: ${message}`);
+            process.stderr.write(`  [FAIL] ${fileName}: ${message}\n`);
+            failed += 1;
+        }
+
+        completed += 1;
+        printProgress(completed, sourceFonts.length);
     }
 
-    const inputBuffer = readFileSync(sourcePath);
+    // Concurrency pool — keep up to CONCURRENCY tasks in flight at once
+    /** @type {Set<Promise<void>>} */
+    const running = new Set();
 
-    /** @type {Buffer} */
-    const outputBuffer = ttf2woff2(inputBuffer);
+    for (let i = 0; i < sourceFonts.length; i += 1) {
+        const sourcePath = sourceFonts[i];
+        if (typeof sourcePath !== "string") {
+            continue;
+        }
 
-    mkdirSync(dirname(outputPath), { recursive: true });
-    writeFileSync(outputPath, outputBuffer);
+        /** @type {Promise<void>} */
+        let task;
+        task = processFont(sourcePath, i).finally(() => {
+            running.delete(task);
+        });
+        running.add(task);
+
+        if (running.size >= CONCURRENCY) {
+            await Promise.race(running);
+        }
+    }
+
+    // Wait for any remaining in-flight tasks
+    await Promise.all(running);
 
     return {
-        entry: {
-            converted: true,
-            family,
-            fileName,
-            outputPath,
-            sizeBytes: outputBuffer.length,
-            sourcePath,
-        },
-        skipped: false,
+        converted,
+        entries: /** @type {FontIndexEntry[]} */ (entries.filter(Boolean)),
+        failed,
+        failures,
+        skipped,
     };
 }
 
 /**
  * Write the font asset index file.
  *
- * @param {readonly FontIndexEntry[]} entries - All index entries.
+ * @param {readonly FontIndexEntry[]} entries
  *
  * @returns {void}
  */
@@ -199,69 +363,11 @@ function writeIndex(entries) {
 }
 
 /**
- * Process all source fonts and collect conversion results.
- *
- * @param {readonly string[]} sourceFonts - Absolute paths to source fonts.
- *
- * @returns {{
- *     converted: number;
- *     entries: FontIndexEntry[];
- *     failed: number;
- *     failures: string[];
- *     skipped: number;
- * }}
- */
-function runConversionLoop(sourceFonts) {
-    /** @type {FontIndexEntry[]} */
-    const entries = [];
-    /** @type {string[]} */
-    const failures = [];
-    let converted = 0;
-    let skipped = 0;
-    let failed = 0;
-
-    for (let index = 0; index < sourceFonts.length; index += 1) {
-        const sourcePath = sourceFonts[index];
-        if (typeof sourcePath !== "string") {
-            continue;
-        }
-
-        const outputPath = toOutputPath(sourcePath);
-
-        try {
-            const result = convertFont(sourcePath, outputPath);
-            entries.push(result.entry);
-            if (result.skipped) {
-                skipped += 1;
-            } else {
-                converted += 1;
-            }
-        } catch (error) {
-            failed += 1;
-            const message =
-                error instanceof Error ? error.message : String(error);
-            failures.push(`${sourcePath}: ${message}`);
-            process.stderr.write(`  [FAIL] ${sourcePath}: ${message}\n`);
-        }
-
-        // Progress report every 100 fonts
-        if ((index + 1) % 100 === 0 || index + 1 === sourceFonts.length) {
-            const pct = Math.round(((index + 1) / sourceFonts.length) * 100);
-            process.stdout.write(
-                `  ${index + 1}/${sourceFonts.length} (${pct}%) \u2014 converted:${converted} skipped:${skipped} failed:${failed}\n`
-            );
-        }
-    }
-
-    return { converted, entries, failed, failures, skipped };
-}
-
-/**
  * Main bulk-conversion entry point.
  *
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function main() {
+async function main() {
     if (!existsSync(sourceRoot) || !statSync(sourceRoot).isDirectory()) {
         throw new Error(
             `Source directory not found: ${sourceRoot}. Run npm run fonts:download first.`
@@ -279,19 +385,19 @@ function main() {
     }
 
     process.stdout.write(
-        `${dryRun ? "[dry-run] " : ""}Converting ${sourceFonts.length} fonts...\n`
+        `${dryRun ? "[dry-run] " : ""}Converting ${sourceFonts.length} fonts` +
+            ` (${CONCURRENCY} parallel workers, ${FONT_TIMEOUT_MS / 1000}s timeout each)...\n`
     );
 
     const startMs = Date.now();
     const { converted, entries, failed, failures, skipped } =
-        runConversionLoop(sourceFonts);
+        await runConversionLoop(sourceFonts);
 
     if (!dryRun) {
         writeIndex(entries);
     }
 
-    const durationMs = Date.now() - startMs;
-    const durationSec = (durationMs / 1000).toFixed(1);
+    const durationSec = ((Date.now() - startMs) / 1000).toFixed(1);
 
     process.stdout.write(`\nDone in ${durationSec}s.\n`);
     process.stdout.write(
@@ -302,8 +408,11 @@ function main() {
         process.stdout.write(`  Index:     ${indexFile}\n`);
     }
 
-    for (const failure of failures) {
-        process.stderr.write(`  [FAIL] ${failure}\n`);
+    if (failures.length > 0) {
+        process.stderr.write(`\nFailed fonts:\n`);
+        for (const f of failures) {
+            process.stderr.write(`  ${f}\n`);
+        }
     }
 
     if (failed > 0) {
@@ -312,7 +421,7 @@ function main() {
 }
 
 try {
-    main();
+    await main();
 } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Error: ${message}\n`);
