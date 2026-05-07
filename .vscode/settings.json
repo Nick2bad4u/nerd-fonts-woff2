@@ -70,5 +70,5 @@
         "**/coverage/**"
     ],
     "strykerMutator.enable": false,
-    "vitest.rootConfig": "vite.config.ts"
+    "vitest.rootConfig": "c:\\repos\\nerd-fonts-woff2\\vite.config.ts"
 }
