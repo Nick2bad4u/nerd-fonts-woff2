@@ -115,7 +115,8 @@
         "src/**/*.ts",
         "test/**/*.d.ts",
         "test/**/*.ts",
-        "vite.config.ts"
+        "vite.config.ts",
+        "vitest.stryker.config.ts"
     ],
     "typeAcquisition": {
         "enable": true,

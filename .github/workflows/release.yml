@@ -4,6 +4,8 @@
 # yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
 name: Release
 
+run-name: Release • ${{ github.ref_name }} @${{ github.actor }}
+
 on:
     push:
         tags:
@@ -34,7 +36,7 @@ permissions:
 
 concurrency:
     group: "${{ github.workflow }}-${{ github.repository }}"
-    cancel-in-progress: false
+    cancel-in-progress: true
 
 jobs:
     release:
@@ -45,6 +47,9 @@ jobs:
         permissions:
             contents: write
             id-token: write
+        defaults:
+            run:
+                shell: bash
         env:
             NPM_REGISTRY_URL: "https://registry.npmjs.org"
             DEFAULT_RELEASE_BRANCH: "main"
@@ -97,14 +102,14 @@ jobs:
             - name: Validate committed asset tree
               run: |
                   set -euo pipefail
-                  if [ ! -d "assets/woff2" ]; then
-                    echo "Expected committed assets under assets/woff2 for raw GitHub/jsDelivr links." >&2
+                  if [ ! -d "fonts/woff2" ]; then
+                    echo "Expected committed assets under fonts/woff2 for raw GitHub/jsDelivr links." >&2
                     exit 1
                   fi
 
-                  count=$(find assets/woff2 -type f -name '*.woff2' | wc -l | tr -d ' ')
+                  count=$(find fonts/woff2 -type f -name '*.woff2' | wc -l | tr -d ' ')
                   if [ "$count" -eq 0 ]; then
-                    echo "No .woff2 files found in assets/woff2. Commit assets before releasing." >&2
+                    echo "No .woff2 files found in fonts/woff2. Commit assets before releasing." >&2
                     exit 1
                   fi
 
@@ -238,8 +243,8 @@ jobs:
                     echo "- Package: \`${{ steps.meta.outputs.package_name }}\`"
                     echo "- Package private: \`${{ steps.meta.outputs.package_private }}\`"
                     echo "- npm already published: \`${{ steps.npm_check.outputs.already_published }}\`"
-                    echo "- Assets expected in repo path: \`assets/woff2/**\`"
+                    echo "- Assets expected in repo path: \`fonts/woff2/**\`"
                     echo ""
                     echo "Raw GitHub URL pattern:"
-                    echo "\`https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.meta.outputs.tag }}/assets/woff2/...\`"
+                    echo "\`https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.meta.outputs.tag }}/fonts/woff2/...\`"
                   } >> "$GITHUB_STEP_SUMMARY"
