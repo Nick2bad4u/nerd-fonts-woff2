@@ -1,12 +1,15 @@
 import type { UnknownRecord } from "type-fest";
 
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
+    closeSync,
     copyFileSync,
     existsSync,
     mkdirSync,
+    openSync,
     readdirSync,
     readFileSync,
+    readSync,
     statSync,
     writeFileSync,
 } from "node:fs";
@@ -43,6 +46,30 @@ import type {
 
 import { printHelp } from "./cli-help.js";
 
+// ─── Color helpers ────────────────────────────────────────────────────────────
+
+function colText(
+    text: string,
+    code: string,
+    stream: Readonly<{ isTTY?: boolean }> = process.stdout
+): string {
+    return supportsColor(stream) ? `\u001B[${code}m${text}\u001B[0m` : text;
+}
+
+function supportsColor(stream: Readonly<{ isTTY?: boolean }>): boolean {
+    return stream.isTTY === true;
+}
+
+const c = {
+    bold: (t: string): string => colText(t, "1"),
+    cyan: (t: string): string => colText(t, "36"),
+    dim: (t: string): string => colText(t, "2"),
+    green: (t: string): string => colText(t, "32"),
+    magenta: (t: string): string => colText(t, "35"),
+    red: (t: string): string => colText(t, "31"),
+    yellow: (t: string): string => colText(t, "33"),
+};
+
 // ─── Local types ──────────────────────────────────────────────────────────────
 
 type BuildConfigResult =
@@ -52,9 +79,11 @@ type BuildConfigResult =
 type ErrorReporter = (message: string, category: ErrorCategory) => void;
 
 type ExecutionConfig = {
+    concurrency: number;
     confirm: boolean;
     converter: string;
     converterArgs: readonly string[];
+    debug: boolean;
     dryRun: boolean;
     failFast: boolean;
     includeExts: ReadonlySet<string>;
@@ -65,6 +94,7 @@ type ExecutionConfig = {
     outDir: string;
     sourceDirs: readonly string[];
     tempDir: string;
+    timeout?: number;
     verbose: boolean;
 };
 
@@ -99,7 +129,7 @@ type SingleFontResult = "converted" | "failed-break" | "failed-continue";
  *
  * @returns Exit code
  */
-export function main(argv: readonly string[]): number {
+export async function main(argv: readonly string[]): Promise<number> {
     const options = parseArguments(argv);
     const result = buildExecutionConfig(options);
 
@@ -110,10 +140,30 @@ export function main(argv: readonly string[]): number {
     const { config } = result;
     const plan = buildPlan(config);
 
+    if (config.debug) {
+        writeOut(c.dim(`[debug] converter: ${config.converter}`));
+        writeOut(c.dim(`[debug] concurrency: ${String(config.concurrency)}`));
+        writeOut(
+            c.dim(
+                `[debug] timeout: ${
+                    typeof config.timeout === "number"
+                        ? `${String(config.timeout)} ms`
+                        : "none"
+                }`
+            )
+        );
+        writeOut(c.dim(`[debug] outDir: ${config.outDir}`));
+        writeOut(c.dim(`[debug] tempDir: ${config.tempDir}`));
+        writeOut(c.dim(`[debug] planned files: ${String(plan.length)}`));
+        writeOut("");
+    }
+
     if (!config.jsonOutput && config.verbose) {
         for (const planned of plan) {
+            const ext = extname(planned.sourcePath).slice(1).toLowerCase();
+            const extLabel = `[.${ext}]`;
             writeOut(
-                `${planned.sourcePath} -> ${join(config.outDir, planned.relativeOutputPath)}`
+                `  ${c.cyan(planned.sourcePath)} ${c.dim("\u2192")} ${c.magenta(join(config.outDir, planned.relativeOutputPath))} ${c.dim(extLabel)}`
             );
         }
 
@@ -122,7 +172,7 @@ export function main(argv: readonly string[]): number {
         }
     }
 
-    const summary = convertFonts(config, plan);
+    const summary = await convertFonts(config, plan);
 
     if (config.jsonOutput) {
         writeOut(JSON.stringify(summary, null, 2));
@@ -220,15 +270,31 @@ function buildExecutionConfig(
         return converterResult;
     }
 
+    const concurrencyRaw = getStringOption(options, "concurrency");
+    const concurrencyResult = resolveConcurrency(concurrencyRaw, reportError);
+    if (!concurrencyResult.ok) {
+        return concurrencyResult;
+    }
+
+    const timeoutRaw = getStringOption(options, "timeout");
+    const timeoutResult = resolveTimeout(timeoutRaw, reportError);
+    if (!timeoutResult.ok) {
+        return timeoutResult;
+    }
+
+    const debug = options["debug"] === true;
+
     const { indexFileRaw, outDir, tempDir } = resolveDirectories(
         options,
         manifest
     );
 
     const config: ExecutionConfig = {
+        concurrency: concurrencyResult.concurrency,
         confirm,
         converter: converterResult.cmd,
         converterArgs: converterResult.args,
+        debug,
         dryRun,
         failFast: options["fail-fast"] === true,
         includeExts: extsResult.exts,
@@ -237,12 +303,15 @@ function buildExecutionConfig(
         outDir,
         sourceDirs,
         tempDir,
-        verbose: options["verbose"] === true,
+        verbose: debug || options["verbose"] === true,
         ...(typeof maxResult.maxFiles === "number"
             ? { maxFiles: maxResult.maxFiles }
             : {}),
         ...(typeof indexFileRaw === "string"
             ? { indexFile: resolve(indexFileRaw) }
+            : {}),
+        ...(typeof timeoutResult.timeout === "number"
+            ? { timeout: timeoutResult.timeout }
             : {}),
     };
 
@@ -341,41 +410,72 @@ function collectListOption(
     return [];
 }
 
-function convertFonts(
+async function convertFonts(
     config: Readonly<ExecutionConfig>,
     plan: readonly Readonly<PlannedFontFile>[]
-): RunSummary {
+): Promise<RunSummary> {
     const startedAt = Date.now();
     let converted = 0;
     const failures: string[] = [];
     const convertedTargets = new Set<string>();
+    let shouldStop = false;
 
     if (config.mode === "convert" && !config.dryRun) {
         mkdirSync(config.tempDir, { recursive: true });
         mkdirSync(config.outDir, { recursive: true });
-    }
 
-    for (const planned of plan) {
-        const outputPath = resolve(
-            join(config.outDir, planned.relativeOutputPath)
+        const queue = [...plan];
+        const limit = Math.max(
+            1,
+            Math.min(config.concurrency, plan.length > 0 ? plan.length : 1)
         );
 
-        if (config.mode !== "convert" || config.dryRun) {
-            continue;
-        }
+        const worker = async (): Promise<void> => {
+            while (queue.length > 0 && !shouldStop) {
+                const planned = queue.shift();
+                if (!isDefined(planned)) {
+                    continue;
+                }
 
-        const result = convertSingleFont(
-            config,
-            planned,
-            outputPath,
-            convertedTargets,
-            failures
-        );
+                const outputPath = resolve(
+                    join(config.outDir, planned.relativeOutputPath)
+                );
 
-        if (result === "converted") {
-            converted += 1;
-        } else if (result === "failed-break") {
-            break;
+                if (config.debug) {
+                    writeOut(
+                        c.dim(`[debug] converting: ${planned.sourcePath}`)
+                    );
+                }
+
+                // eslint-disable-next-line no-await-in-loop -- intentional: sequential within this worker; parallelism is achieved across multiple workers
+                const result = await convertSingleFont(
+                    config,
+                    planned,
+                    outputPath,
+                    convertedTargets,
+                    failures
+                );
+
+                if (result === "converted") {
+                    converted += 1;
+                    if (config.verbose) {
+                        writeOut(
+                            `  ${c.green("\u2714")} ${c.cyan(basename(planned.sourcePath))}`
+                        );
+                    }
+                } else if (result === "failed-break") {
+                    // eslint-disable-next-line require-atomic-updates -- Node.js is single-threaded; no true race between check and assignment
+                    shouldStop = true;
+                } else if (result === "failed-continue" && config.verbose) {
+                    writeOut(
+                        `  ${c.red("\u2716")} ${c.cyan(basename(planned.sourcePath))}`
+                    );
+                }
+            }
+        };
+
+        if (plan.length > 0) {
+            await Promise.all(Array.from({ length: limit }, worker));
         }
     }
 
@@ -404,14 +504,14 @@ function convertFonts(
     return summary;
 }
 
-function convertSingleFont(
+async function convertSingleFont(
     config: Readonly<ExecutionConfig>,
     planned: Readonly<PlannedFontFile>,
     outputPath: string,
     convertedTargets: Set<string>,
     // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types -- failures accumulator is mutated via push() to collect error messages
     failures: string[]
-): SingleFontResult {
+): Promise<SingleFontResult> {
     const stagedInput = resolve(
         join(
             config.tempDir,
@@ -423,10 +523,10 @@ function convertSingleFont(
     mkdirSync(dirname(stagedInput), { recursive: true });
     copyFileSync(planned.sourcePath, stagedInput);
 
-    const commandResult = spawnSync(
+    const commandResult = await runConverter(
         config.converter,
         [...config.converterArgs, stagedInput],
-        { encoding: "utf8", shell: false }
+        config.timeout
     );
 
     if (commandResult.status !== 0) {
@@ -447,11 +547,21 @@ function convertSingleFont(
         return config.failFast ? "failed-break" : "failed-continue";
     }
 
+    if (!isValidWoff2File(stagedOutput)) {
+        failures.push(
+            `${planned.sourcePath}: converter output failed WOFF2 magic bytes validation`
+        );
+        return config.failFast ? "failed-break" : "failed-continue";
+    }
+
     mkdirSync(dirname(outputPath), { recursive: true });
     copyFileSync(stagedOutput, outputPath);
     convertedTargets.add(outputPath);
     return "converted";
 }
+
+// ─── WOFF2 validation ─────────────────────────────────────────────────────────
+
 function emitJsonError(message: string, category: ErrorCategory): void {
     writeErr(
         JSON.stringify(
@@ -466,6 +576,8 @@ function emitJsonError(message: string, category: ErrorCategory): void {
         )
     );
 }
+
+// ─── Converter runner ─────────────────────────────────────────────────────────
 
 function emitTextError(message: string): void {
     writeErr(`Error: ${message}`);
@@ -484,11 +596,10 @@ function getStringOption(
     return trimmed.length > 0 ? trimmed : undefined;
 }
 
-// ─── Manifest parsing ─────────────────────────────────────────────────────────
-
 // ─── Argument parsing ─────────────────────────────────────────────────────────
 function isBooleanFlag(key: string): boolean {
     return (
+        key === "debug" ||
         key === "help" ||
         key === "dry-run" ||
         key === "confirm" ||
@@ -500,15 +611,48 @@ function isBooleanFlag(key: string): boolean {
     );
 }
 
-// ─── Font discovery ───────────────────────────────────────────────────────────
-
 function isListFlag(key: string): boolean {
     return (
         key === "source-dir" || key === "converter-arg" || key === "include-ext"
     );
 }
 
-// ─── Index building ───────────────────────────────────────────────────────────
+// ─── Manifest parsing ─────────────────────────────────────────────────────────
+
+/**
+ * Validates that a file begins with the WOFF2 magic bytes (0x774F4632 =
+ * "wOF2"). Returns `false` if the file cannot be read or is too short.
+ */
+function isValidWoff2File(filePath: string): boolean {
+    // WOFF2 magic: "wOF2" = 0x77 0x4F 0x46 0x32
+    const magic = [
+        0x77,
+        0x4f,
+        0x46,
+        0x32,
+    ] as const;
+    try {
+        const fd = openSync(filePath, "r");
+        const buffer = Buffer.alloc(4);
+        let bytesRead = 0;
+        try {
+            bytesRead = readSync(fd, buffer, 0, 4, 0);
+        } finally {
+            closeSync(fd);
+        }
+        return (
+            bytesRead === 4 &&
+            buffer[0] === arrayFirst(magic) &&
+            buffer[1] === magic[1] &&
+            buffer[2] === magic[2] &&
+            buffer[3] === magic[3]
+        );
+    } catch {
+        return false;
+    }
+}
+
+// ─── Font discovery ───────────────────────────────────────────────────────────
 
 function listFontFiles(
     sourceDir: string,
@@ -552,6 +696,8 @@ function listFontFiles(
     return discovered;
 }
 
+// ─── Index building ───────────────────────────────────────────────────────────
+
 function loadManifest(
     manifestPath: string | undefined,
     reportError: ErrorReporter
@@ -572,8 +718,6 @@ function loadManifest(
     }
 }
 
-// ─── Build plan ───────────────────────────────────────────────────────────────
-
 function normalizeExtList(entries: readonly string[]): ReadonlySet<string> {
     const normalized = entries
         .map((entry) => entry.trim().toLowerCase())
@@ -583,7 +727,7 @@ function normalizeExtList(entries: readonly string[]): ReadonlySet<string> {
     return new Set(normalized);
 }
 
-// ─── Conversion ───────────────────────────────────────────────────────────────
+// ─── Build plan ───────────────────────────────────────────────────────────────
 
 function parseArguments(args: readonly string[]): ParsedOptions {
     const parsed: ParsedOptions = {};
@@ -627,6 +771,8 @@ function parseArguments(args: readonly string[]): ParsedOptions {
 
     return parsed;
 }
+
+// ─── Conversion ───────────────────────────────────────────────────────────────
 
 function parseManifest(pathToManifest: string): ManifestFile {
     const raw = readFileSync(pathToManifest, "utf8");
@@ -701,11 +847,26 @@ function printTextSummary(
     summary: Readonly<RunSummary>,
     verbose: boolean
 ): void {
-    writeOut(`Mode: ${summary.mode}${summary.dryRun ? " (dry-run)" : ""}`);
-    writeOut(`Planned files: ${summary.planned}`);
-    writeOut(`Converted files: ${summary.converted}`);
-    writeOut(`Failed files: ${summary.failed}`);
-    writeOut(`Skipped files: ${summary.skipped}`);
+    const modeLabel = `${summary.mode}${summary.dryRun ? " (dry-run)" : ""}`;
+    writeOut(`Mode:             ${c.bold(modeLabel)}`);
+    writeOut(`Planned files:    ${c.cyan(String(summary.planned))}`);
+    writeOut(
+        `Converted files:  ${
+            summary.converted > 0
+                ? c.green(String(summary.converted))
+                : String(summary.converted)
+        }`
+    );
+    writeOut(
+        `Failed files:     ${
+            summary.failed > 0
+                ? c.red(String(summary.failed))
+                : String(summary.failed)
+        }`
+    );
+    writeOut(`Skipped files:    ${String(summary.skipped)}`);
+    const durationStr = `${String(summary.durationMs)} ms`;
+    writeOut(`Duration:         ${c.dim(durationStr)}`);
     writeOut(`Output directory: ${summary.outDir}`);
 
     if (typeof summary.indexFile === "string") {
@@ -714,11 +875,31 @@ function printTextSummary(
 
     if (verbose && summary.failures.length > 0) {
         writeOut("");
-        writeOut("Failures:");
+        writeOut(c.bold(c.red("Failures:")));
         for (const failure of summary.failures) {
-            writeOut(`- ${failure}`);
+            writeOut(`  ${c.red("\u2716")} ${failure}`);
         }
     }
+}
+
+function resolveConcurrency(
+    raw: string | undefined,
+    reportError: ErrorReporter
+): { code: number; ok: false } | { concurrency: number; ok: true } {
+    if (!isDefined(raw)) {
+        return { concurrency: 1, ok: true };
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    if (!isFinite(parsed) || parsed < 1) {
+        reportError(
+            "--concurrency must be a positive integer.",
+            "validation_error"
+        );
+        return { code: 1, ok: false };
+    }
+
+    return { concurrency: parsed, ok: true };
 }
 
 function resolveConverter(
@@ -748,8 +929,6 @@ function resolveConverter(
 
     return { args, cmd, ok: true };
 }
-
-// ─── Config builder ───────────────────────────────────────────────────────────
 
 function resolveDirectories(
     options: Readonly<ParsedOptions>,
@@ -804,6 +983,8 @@ function resolveIncludeExts(
     return { exts: includeExts, ok: true };
 }
 
+// ─── Config builder ───────────────────────────────────────────────────────────
+
 function resolveMaxFiles(
     maxFilesRaw: string | undefined,
     reportError: ErrorReporter
@@ -851,6 +1032,26 @@ function resolveSources(
     ];
 }
 
+function resolveTimeout(
+    raw: string | undefined,
+    reportError: ErrorReporter
+): { code: number; ok: false } | { ok: true; timeout: number | undefined } {
+    if (!isDefined(raw)) {
+        return { ok: true, timeout: undefined };
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    if (!isFinite(parsed) || parsed < 1) {
+        reportError(
+            "--timeout must be a positive integer (milliseconds).",
+            "validation_error"
+        );
+        return { code: 1, ok: false };
+    }
+
+    return { ok: true, timeout: parsed };
+}
+
 function resolveTokenValue(
     inlineValue: string | undefined,
     nextToken: string | undefined
@@ -864,6 +1065,36 @@ function resolveTokenValue(
     }
 
     return "";
+}
+
+/**
+ * Runs an external converter process asynchronously. Resolves with the exit
+ * status and captured stdout/stderr. If `timeout` is provided (in
+ * milliseconds), the process is killed after that time.
+ */
+async function runConverter(
+    cmd: string,
+    args: readonly string[],
+    timeout: number | undefined
+): Promise<{ status: number; stderr: string; stdout: string }> {
+    return new Promise<{ status: number; stderr: string; stdout: string }>(
+        (_resolve) => {
+            execFile(
+                cmd,
+                [...args],
+                { timeout: timeout ?? 0 },
+                function onConverterDone(error, stdout, stderr) {
+                    if (error === null) {
+                        _resolve({ status: 0, stderr, stdout });
+                    } else {
+                        const status =
+                            typeof error.code === "number" ? error.code : 1;
+                        _resolve({ status, stderr, stdout });
+                    }
+                }
+            );
+        }
+    );
 }
 
 function toNonEmptyArray(
@@ -931,7 +1162,12 @@ const isDirectExecution =
  * Runs the CLI using `process.argv` and sets `process.exitCode` accordingly.
  */
 export function runCli(): void {
-    process.exitCode = main(process.argv.slice(2));
+    void (async () => {
+        // Store result before assigning to avoid require-atomic-updates
+        const exitCode = await main(process.argv.slice(2));
+        // eslint-disable-next-line require-atomic-updates -- intentional: we own process.exitCode
+        process.exitCode = exitCode;
+    })();
 }
 
 if (isDirectExecution) {
