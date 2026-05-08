@@ -82,12 +82,18 @@ function closeLinkModal() {
 }
 
 /**
- * @param {{ label: string; logo: string; url: string }[]} links
+ * @param {{
+ *     iconClass: string;
+ *     label: string;
+ *     logo: string;
+ *     url: string;
+ * }[]} links
  * @param {string} fileName
+ * @param {HTMLElement} triggerButton
  *
  * @returns {void}
  */
-function openLinkModal(links, fileName) {
+function openLinkModal(links, fileName, triggerButton) {
     linkItemsNode.replaceChildren();
 
     for (const linkDef of links) {
@@ -99,12 +105,23 @@ function openLinkModal(links, fileName) {
 
         const logo = document.createElement("span");
         logo.className = "cdn-logo";
-        logo.textContent = linkDef.logo;
+        logo.classList.add("nf", linkDef.iconClass);
+        logo.setAttribute("aria-hidden", "true");
+        logo.title = linkDef.label;
         left.append(logo);
 
         const label = document.createElement("div");
         label.className = "link-item-label";
-        label.textContent = linkDef.label;
+        const labelName = document.createElement("span");
+        labelName.className = "link-item-name";
+        labelName.textContent = linkDef.label;
+
+        const labelCode = document.createElement("span");
+        labelCode.className = "link-item-code";
+        labelCode.textContent = linkDef.logo;
+
+        label.append(labelName, labelCode);
+        label.title = linkDef.url;
         left.append(label);
         item.append(left);
 
@@ -117,12 +134,14 @@ function openLinkModal(links, fileName) {
         openButton.target = "_blank";
         openButton.rel = "noopener noreferrer";
         openButton.textContent = "↗ Open";
+        openButton.title = linkDef.url;
         actions.append(openButton);
 
         const copyButton = document.createElement("button");
         copyButton.type = "button";
         copyButton.className = "btn btn-primary";
         copyButton.textContent = "📋 Copy";
+        copyButton.title = linkDef.url;
         copyButton.addEventListener("click", () => {
             copyText(linkDef.url)
                 .then(() => {
@@ -141,6 +160,24 @@ function openLinkModal(links, fileName) {
         linkItemsNode.append(item);
     }
 
+    const triggerBounds = triggerButton.getBoundingClientRect();
+    const popupWidth = 520;
+    const popupHeight = 420;
+    const viewportPadding = 8;
+    const computedLeft = Math.min(
+        Math.max(triggerBounds.left, viewportPadding),
+        globalThis.innerWidth - popupWidth - viewportPadding
+    );
+    const canOpenBelow =
+        triggerBounds.bottom + 8 + popupHeight <=
+        globalThis.innerHeight - viewportPadding;
+    const preferredTop = canOpenBelow
+        ? triggerBounds.bottom + 8
+        : triggerBounds.top - popupHeight - 8;
+    const computedTop = Math.max(viewportPadding, preferredTop);
+
+    linkModalNode.style.left = `${computedLeft}px`;
+    linkModalNode.style.top = `${computedTop}px`;
     linkModalNode.dataset["open"] = "true";
     const titleNode = document.getElementById("link_modal_title");
     if (titleNode instanceof HTMLElement) {
@@ -216,31 +253,41 @@ function toCdnUrl(version, relativePath) {
  * @param {string} version
  * @param {string} relativePath
  *
- * @returns {{ label: string; logo: string; url: string }[]}
+ * @returns {{
+ *     iconClass: string;
+ *     label: string;
+ *     logo: string;
+ *     url: string;
+ * }[]}
  */
 function buildPopularLinks(version, relativePath) {
     return [
         {
+            iconClass: "nf-md-cloud_outline",
             label: "jsDelivr (GitHub)",
             logo: "JS",
             url: toCdnUrl(version, relativePath),
         },
         {
+            iconClass: "nf-fa-github",
             label: "Raw GitHub",
             logo: "GH",
             url: `https://raw.githubusercontent.com/Nick2bad4u/nerd-fonts-woff2/${version}/${relativePath}`,
         },
         {
+            iconClass: "nf-dev-npm",
             label: "jsDelivr (npm)",
             logo: "NPM",
             url: `https://cdn.jsdelivr.net/npm/nerd-font-woff2@${version}/${relativePath}`,
         },
         {
+            iconClass: "nf-md-package_variant",
             label: "unpkg (npm)",
             logo: "U",
             url: `https://unpkg.com/nerd-font-woff2@${version}/${relativePath}`,
         },
         {
+            iconClass: "nf-fa-bolt",
             label: "Raw Githack",
             logo: "GK",
             url: `https://rawcdn.githack.com/Nick2bad4u/nerd-fonts-woff2/${version}/${relativePath}`,
@@ -408,7 +455,7 @@ function render() {
             openLinksButton.className = "btn btn-primary";
             openLinksButton.textContent = "🔗 Copy CDN links";
             openLinksButton.addEventListener("click", () => {
-                openLinkModal(cdnLinks, entry.fileName);
+                openLinkModal(cdnLinks, entry.fileName, openLinksButton);
             });
             actions.append(openLinksButton);
 
@@ -423,7 +470,7 @@ function render() {
             const originalFamilyLink = document.createElement("a");
             originalFamilyLink.href = `https://github.com/ryanoasis/nerd-fonts/tree/master/patched-fonts/${encodeURIComponent(entry.family)}`;
             originalFamilyLink.className = "btn";
-            originalFamilyLink.textContent = "🧷 Original Nerd Font family";
+            originalFamilyLink.textContent = "🧷 Nerd Fonts source";
             originalFamilyLink.target = "_blank";
             originalFamilyLink.rel = "noopener noreferrer";
             actions.append(originalFamilyLink);
@@ -494,6 +541,27 @@ closeLinkModalButton.addEventListener("click", () => {
 
 linkModalNode.addEventListener("click", (event) => {
     if (event.target === linkModalNode) {
+        closeLinkModal();
+    }
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && linkModalNode.dataset["open"] === "true") {
+        closeLinkModal();
+    }
+});
+
+document.addEventListener("mousedown", (event) => {
+    if (linkModalNode.dataset["open"] !== "true") {
+        return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Node)) {
+        return;
+    }
+
+    if (!linkModalNode.contains(target)) {
         closeLinkModal();
     }
 });
