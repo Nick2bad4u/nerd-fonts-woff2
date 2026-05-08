@@ -1,0 +1,38 @@
+# Font source/output assets — served via GitHub Pages + CDN, not shipped in npm
+fonts/
+
+# Development/build tooling
+src/
+test/
+scripts/
+coverage/
+assets/
+temp/
+.cache/
+*.map
+
+# Config/tooling files
+tsconfig*.json
+vite.config.ts
+vitest.stryker.config.ts
+eslint.config.mjs
+prettier.config.mjs
+stylelint.config.mjs
+tsdoc.json
+cliff.toml
+sonar-project.properties
+codecov.yml
+*.mjs
+
+# CI/docs
+.github/
+docs/
+DEVELOPER.md
+CONTRIBUTING.md
+CONTRIBUTORS.md
+SECURITY.md
+SUPPORT.md
+CODE_OF_CONDUCT.md
+CHANGELOG.md
+test-report.junit.xml
+index.html
