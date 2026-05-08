@@ -278,13 +278,13 @@ function buildPopularLinks(version, relativePath) {
             iconClass: "nf-dev-npm",
             label: "jsDelivr (npm)",
             logo: "NPM",
-            url: `https://cdn.jsdelivr.net/npm/nerd-font-woff2@${version}/${relativePath}`,
+            url: `https://cdn.jsdelivr.net/npm/nerd-fonts-woff2@${version}/${relativePath}`,
         },
         {
             iconClass: "nf-md-package_variant",
             label: "unpkg (npm)",
             logo: "U",
-            url: `https://unpkg.com/nerd-font-woff2@${version}/${relativePath}`,
+            url: `https://unpkg.com/nerd-fonts-woff2@${version}/${relativePath}`,
         },
         {
             iconClass: "nf-fa-bolt",

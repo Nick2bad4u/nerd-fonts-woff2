@@ -1,4 +1,4 @@
-# Contributing to nerd-font-woff2
+# Contributing to nerd-fonts-woff2
 
 Thanks for helping improve this font conversion pipeline.
 
@@ -27,7 +27,7 @@ npm test
 
 For developers who want in-depth guides see below for detailed documentation on the build pipeline, CLI tool, and release process.
 
-## Developer Guide — nerd-font-woff2
+## Developer Guide — nerd-fonts-woff2
 
 This document covers the build pipeline, conversion tooling, CLI, and release process for maintainers and contributors.
 
@@ -127,7 +127,7 @@ The CLI (`dist/src/cli.js`) provides fine-grained control for single-directory o
 ### Plan only (safe default)
 
 ```bash
-npx nerd-font-woff2 --source-dir ./fonts/original --dry-run
+npx nerd-fonts-woff2 --source-dir ./fonts/original --dry-run
 ```
 
 ### Convert files

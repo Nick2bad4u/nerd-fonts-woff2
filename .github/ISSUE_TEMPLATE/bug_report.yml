@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible bug in nerd-font-woff2
+description: Report a reproducible bug in nerd-fonts-woff2
 title: "[Bug]: "
 labels:
     - bug
@@ -18,7 +18,7 @@ body:
           label: Steps to reproduce
           description: Include exact command(s), config, and flags used.
           placeholder: |
-              1. nerd-font-woff2 --source-dir ./temp/fonts --dry-run
+              1. nerd-fonts-woff2 --source-dir ./temp/fonts --dry-run
               2. ...
       validations:
           required: true
