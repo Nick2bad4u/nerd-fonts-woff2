@@ -65,6 +65,8 @@ https://cdn.jsdelivr.net/gh/Nick2bad4u/nerd-fonts-woff2@<version>/fonts/woff2/<F
 
 Find available files by browsing the [`fonts/woff2/`](./fonts/woff2) folder in this repository, or see the full [asset index](./fonts/woff2/index.json).
 
+You can also browse a searchable index page on GitHub Pages: [`/index.html`](./index.html)
+
 ---
 
 ## Install via npm
@@ -99,6 +101,44 @@ const pkgDir = join(require.resolve("nerd-font-woff2/package.json"), "..");
 const fontBuffer = readFileSync(
   join(pkgDir, "fonts", "woff2", "JetBrainsMono", "JetBrainsMonoNerdFont-Regular.woff2")
 );
+```
+
+---
+
+## CLI usage
+
+### Usage
+
+```bash
+npx nerd-font-woff2 --source-dir ./fonts/original [options]
+```
+
+### Execution flags
+
+- `--convert` enable conversion mode (default is plan mode)
+- `--confirm` / `--yes` required safety gate for non-dry-run conversion
+- `--dry-run` plan only, no conversion writes
+- `--concurrency <n>` max parallel conversions (default: `1`)
+- `--timeout <ms>` per-file converter timeout (default: `60000` / `60s`)
+- `--index-file <path>` output index file path (default: `<out-dir>/index.json`)
+- `--verbose` more detailed progress output
+- `--debug` debug output (implies `--verbose`)
+- `--json` machine-readable summary output
+
+### Examples
+
+```bash
+# Plan only (safe default)
+npx nerd-font-woff2 --source-dir ./fonts/original
+
+# Convert with explicit safety confirmation
+npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm
+
+# Faster conversion with custom concurrency and timeout
+npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm --concurrency 4 --timeout 120000
+
+# JSON summary and explicit index file
+npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm --json --index-file ./fonts/woff2/index.json
 ```
 
 ---

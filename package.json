@@ -57,6 +57,8 @@
         "assets:plan": "npm run fonts:plan",
         "build": "tsc -p tsconfig.json",
         "dev": "node ./src/cli.ts",
+        "final": "npm install && npm run build && npm run typecheck && npm run lint:fix:quiet && npm run test && npm run fonts:setup && npm run fonts:check-upstream && npm run fonts:download && npm run fonts:convert && npm run fonts:verify",
+        "fonts:check-upstream": "node ./scripts/check-nerd-fonts-updates.mjs",
         "fonts:convert": "node ./scripts/bulk-convert-fonts.mjs",
         "fonts:convert:cli": "npm run build && node ./scripts/convert-font-assets.mjs",
         "fonts:convert:dry-run": "node ./scripts/bulk-convert-fonts.mjs --dry-run",

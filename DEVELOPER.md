@@ -38,6 +38,19 @@ Asset fetching and conversion are intentionally **local-only** operations. CI do
 npm run fonts:download
 ```
 
+Check whether upstream Nerd Fonts has a newer tag than your local downloaded source metadata:
+
+```bash
+npm run fonts:check-upstream
+```
+
+Optional flags for scripting:
+
+```bash
+npm run fonts:check-upstream -- --json
+npm run fonts:check-upstream -- --fail-on-update
+```
+
 Performs a sparse checkout of `ryanoasis/nerd-fonts` and copies `patched-fonts/**` into `fonts/original/**`.
 Default ref is pinned to `v3.4.0` for reproducibility. Override with:
 
@@ -140,24 +153,34 @@ Example manifest:
 
 ### CLI options reference
 
-| Flag                      | Description                         |
-| ------------------------- | ----------------------------------- |
-| `--source-dir <path>`     | Source directory (repeatable)       |
-| `--manifest <file>`       | Load options from a JSON manifest   |
-| `--out-dir <path>`        | Output directory for `.woff2` files |
-| `--temp-dir <path>`       | Scratch directory for staging       |
-| `--include-ext <ttf,otf>` | File extensions to include          |
-| `--max-files <n>`         | Limit files processed               |
-| `--convert`               | Enable conversion (off by default)  |
-| `--dry-run`               | Plan without writing files          |
-| `--confirm` / `--yes`     | Skip confirmation prompt            |
-| `--converter <cmd>`       | Converter command (default: `node`) |
-| `--converter-arg <value>` | Converter argument (repeatable)     |
-| `--fail-fast`             | Stop on first failure               |
-| `--index-file <path>`     | Write JSON asset index              |
-| `--verbose`               | Verbose output                      |
-| `--json`                  | Machine-readable JSON output        |
-| `--help`                  | Show help                           |
+| Flag                      | Description                                   |
+| ------------------------- | --------------------------------------------- |
+| `--source-dir <path>`     | Source directory (repeatable)                 |
+| `--manifest <file>`       | Load options from a JSON manifest             |
+| `--out-dir <path>`        | Output directory for `.woff2` files           |
+| `--temp-dir <path>`       | Scratch directory for staging                 |
+| `--include-ext <ttf,otf>` | File extensions to include                    |
+| `--max-files <n>`         | Limit files processed                         |
+| `--convert`               | Enable conversion (off by default)            |
+| `--dry-run`               | Plan without writing files                    |
+| `--confirm` / `--yes`     | Skip confirmation prompt                      |
+| `--converter <cmd>`       | Converter command (default: `woff2_compress`) |
+| `--converter-arg <value>` | Converter argument (repeatable)               |
+| `--fail-fast`             | Stop on first failure                         |
+| `--concurrency <n>`       | Parallel conversions (default: `1`)           |
+| `--timeout <ms>`          | Per-file timeout (default: `60000`)           |
+| `--index-file <path>`     | Write JSON asset index                        |
+| `--verbose`               | Verbose output                                |
+| `--debug`                 | Debug output (implies verbose)                |
+| `--json`                  | Machine-readable JSON output                  |
+| `--help`                  | Show help                                     |
+
+Default behavior notes:
+
+- `--index-file` defaults to `<out-dir>/index.json`
+- index writing only occurs in non-dry-run `--convert` mode (safe plan mode stays write-free)
+- `--timeout` defaults to `60000` ms (`60s`)
+- `--concurrency` defaults to `1` for deterministic/safe CLI execution
 
 ### Exit codes
 
@@ -186,6 +209,25 @@ Or run them all together:
 ```bash
 npm run lint:all
 ```
+
+End-to-end local refresh pipeline (install → checks → source update check → download → convert → verify):
+
+```bash
+npm run final
+```
+
+---
+
+## GitHub Pages font browser
+
+A static searchable font browser is available at repository root `index.html`.
+It reads `fonts/woff2/index.json` and renders family/file links for easy discovery.
+
+- Default file path: `./index.html`
+- Data source: `./fonts/woff2/index.json`
+- CDN links are generated for `jsDelivr` and are version-editable in the UI.
+
+If using GitHub Pages with branch deployment, keep publishing from `main` and include root files (or configure Pages to a folder that contains this `index.html` plus `fonts/woff2`).
 
 ---
 

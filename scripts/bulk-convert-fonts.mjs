@@ -36,12 +36,26 @@ const workerScript = new URL("./woff2-convert-worker.mjs", import.meta.url);
 
 const dryRun = process.argv.includes("--dry-run");
 const force = process.argv.includes("--force");
+const concurrencyFlag = process.argv.find((arg) =>
+    arg.startsWith("--concurrency=")
+);
 
-/** Maximum parallel conversions. Cap at 4 to avoid excessive memory use. */
-const CONCURRENCY = Math.min(cpus().length, 4);
+/**
+ * Maximum parallel conversions. Cap at 8 (32 for user-provided) to avoid
+ * excessive memory use.
+ */
+const CONCURRENCY = concurrencyFlag
+    ? Math.min(
+          Math.max(Number.parseInt(concurrencyFlag.split("=")[1], 10) || 1, 1),
+          32
+      )
+    : Math.min(cpus().length, 8);
 
 /** Kill a worker if a single font takes longer than this. */
-const FONT_TIMEOUT_MS = 60_000;
+const timeoutFlag = process.argv.find((arg) => arg.startsWith("--timeout="));
+const FONT_TIMEOUT_MS = timeoutFlag
+    ? Math.max(Number.parseInt(timeoutFlag.split("=")[1], 10) || 1, 1) * 1000
+    : 60_000;
 
 /**
  * @typedef {{

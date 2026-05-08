@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            content="width=device-width, initial-scale=1.0"
+            name="viewport"
+        />
+        <title>nerd-font-woff2 index</title>
+        <style>
+            body {
+                margin: 0;
+                background: #0f1115;
+                color: #f2f3f5;
+                font-family: Arial, sans-serif;
+            }
+            .header,
+            .main {
+                max-width: 1100px;
+                margin: 0 auto;
+                padding: 1rem;
+            }
+            .controls {
+                display: grid;
+                gap: 1rem;
+                grid-template-columns: 1fr 1fr;
+            }
+            label {
+                display: grid;
+                gap: 0.4rem;
+                color: #c7cad1;
+            }
+            input {
+                padding: 0.6rem 0.75rem;
+                border-radius: 0.5rem;
+                border: 1px solid #2c3342;
+                background: #151925;
+                color: #f2f3f5;
+            }
+            .results {
+                display: grid;
+                gap: 1rem;
+                margin-top: 1rem;
+            }
+            .family {
+                border: 1px solid #2a3140;
+                border-radius: 0.75rem;
+                background: #151a22;
+                overflow: hidden;
+            }
+            .family > summary {
+                cursor: pointer;
+                padding: 0.85rem 1rem;
+                font-weight: 700;
+                background: #1a202c;
+            }
+            .files {
+                display: grid;
+                gap: 0.5rem;
+                padding: 0.75rem;
+            }
+            .file {
+                border: 1px solid #293142;
+                border-radius: 0.5rem;
+                padding: 0.6rem;
+                background: #101520;
+                display: grid;
+                gap: 0.3rem;
+            }
+            .file-name {
+                font-family: Consolas, monospace;
+                font-size: 0.85rem;
+                color: #d2e0ff;
+            }
+            .file a {
+                color: #9dc2ff;
+                text-decoration: none;
+            }
+            .file a:hover {
+                text-decoration: underline;
+            }
+        </style>
+        <meta
+            content="Searchable browser for Nerd Fonts WOFF2 assets published in this repository."
+            name="description"
+        />
+        <meta
+            content="nerd-font-woff2 browser"
+            property="og:title"
+        />
+        <meta
+            content="website"
+            property="og:type"
+        />
+        <meta
+            content="https://nick2bad4u.github.io/nerd-fonts-woff2/"
+            property="og:url"
+        />
+        <meta
+            content="https://nick2bad4u.github.io/nerd-fonts-woff2/assets/logo.png"
+            property="og:image"
+        />
+    </head>
+    <body>
+        <header class="header">
+            <h1>nerd-font-woff2 browser</h1>
+            <p
+                >Browse all generated WOFF2 assets from
+                <code>fonts/woff2/index.json</code>.</p
+            >
+        </header>
+
+        <main class="main">
+            <section class="controls">
+                <label>
+                    Search family/file
+                    <input
+                        id="search"
+                        type="search"
+                        placeholder="JetBrainsMono or Regular"
+                    />
+                </label>
+                <label>
+                    Version/tag for CDN links
+                    <input
+                        id="version"
+                        type="text"
+                        value="main"
+                    />
+                </label>
+            </section>
+
+            <p
+                id="status"
+                class="status"
+                >Loading index...</p
+            >
+
+            <section
+                id="results"
+                class="results"
+                aria-live="polite"
+            ></section>
+        </main>
+
+        <script
+            type="module"
+            src="./assets/font-index.js"
+        ></script>
+    </body>
+</html>
