@@ -1,4 +1,4 @@
-# Copilot Instructions for nerd-font-woff2
+# Copilot Instructions for nerd-fonts-woff2
 
 This repository provides a CLI pipeline for building WOFF2 assets from Nerd Fonts and other TTF/OTF font sources.
 
@@ -23,7 +23,7 @@ Before finalizing changes, run:
 - Source: `src/`
 - Tests: `test/`
 - Build output: `dist/`
-- Entrypoint wrapper: `nerd-font-woff2`
+- Entrypoint wrapper: `nerd-fonts-woff2`
 
 ## Behavioral expectations
 
