@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import { main } from "../src/cli.js";
 
 function createFixtureRoot(): string {
-    return mkdtempSync(nodePath.join(tmpdir(), "nerd-font-woff2-test-"));
+    return mkdtempSync(nodePath.join(tmpdir(), "nerd-fonts-woff2-test-"));
 }
 
 /** Writes a fake converter that exits with code 1 (failure). */

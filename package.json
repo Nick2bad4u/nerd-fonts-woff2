@@ -80,6 +80,8 @@
         "lint:fix:quiet": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
         "lint:prettier": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --check",
         "lint:prettier:fix": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --write",
+        "lint:remark": "remark --rc-path .remarkrc.mjs --silently-ignore --ignore-path .remarkignore  .",
+        "lint:remark:fix": "remark --rc-path .remarkrc.mjs --silently-ignore --ignore-path .remarkignore --output .",
         "prepack": "npm run build",
         "release:check": "npm run lint:all && npm test",
         "start": "node ./src/cli.ts",

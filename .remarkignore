@@ -828,3 +828,6 @@ docs/Guides/TODO.md
 
 # Docusaurus API reference files (if auto-generated)
 **/site-docs/developer/api/
+
+# fonts
+**/fonts/**

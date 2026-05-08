@@ -116,7 +116,7 @@ type SingleFontResult = "converted" | "failed-break" | "failed-continue";
 // ─── Error reporting ──────────────────────────────────────────────────────────
 
 /**
- * Entry point for the nerd-font-woff2 CLI.
+ * Entry point for the nerd-fonts-woff2 CLI.
  *
  * Parses the provided argument list, builds an execution config, plans or
  * converts fonts, and returns a numeric exit code:

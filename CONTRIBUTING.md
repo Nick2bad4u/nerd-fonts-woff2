@@ -133,13 +133,13 @@ npx nerd-fonts-woff2 --source-dir ./fonts/original --dry-run
 ### Convert files
 
 ```bash
-npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm
+npx nerd-fonts-woff2 --source-dir ./fonts/original --convert --confirm
 ```
 
 ### Convert with JSON summary and index file
 
 ```bash
-npx nerd-font-woff2 \
+npx nerd-fonts-woff2 \
   --source-dir ./fonts/original \
   --convert \
   --confirm \
@@ -150,7 +150,7 @@ npx nerd-font-woff2 \
 ### Use a manifest file
 
 ```bash
-npx nerd-font-woff2 --manifest ./nerd-font-woff2.config.json --convert --confirm
+npx nerd-fonts-woff2 --manifest ./nerd-fonts-woff2.config.json --convert --confirm
 ```
 
 Example manifest:
@@ -231,7 +231,7 @@ git commit -m "Update generated WOFF2 assets"
 
 ## npm packaging
 
-- `bin` entry: `nerd-font-woff2`
+- `bin` entry: `nerd-fonts-woff2`
 - `prepack` runs `npm run build` so published tarballs include compiled `dist/` output
 - Published files are restricted to runtime essentials (`dist/`, `fonts/woff2/`, wrapper, README, LICENSE)
 - Release workflow validates that committed assets exist before creating a GitHub release
