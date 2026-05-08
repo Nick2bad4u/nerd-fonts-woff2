@@ -40,12 +40,12 @@
     "type": "module",
     "exports": {
         ".": {
-            "import": "./dist/src/cli.js",
-            "types": "./dist/src/cli.d.ts"
+            "import": "./dist/cli.js",
+            "types": "./dist/cli.d.ts"
         }
     },
-    "main": "./dist/src/cli.js",
-    "types": "./dist/src/cli.d.ts",
+    "main": "./dist/cli.js",
+    "types": "./dist/cli.d.ts",
     "bin": {
         "nerd-font-woff2": "./nerd-font-woff2"
     },
@@ -59,7 +59,7 @@
     "scripts": {
         "assets:generate": "npm run fonts:convert",
         "assets:plan": "npm run fonts:plan",
-        "build": "tsc -p tsconfig.json",
+        "build": "tsc -p tsconfig.build.json",
         "dev": "node ./src/cli.ts",
         "final": "npm install && npm run build && npm run typecheck && npm run lint:fix:quiet && npm run test && npm run fonts:setup && npm run fonts:check-upstream && npm run fonts:download && npm run fonts:convert && npm run fonts:verify",
         "fonts:check-upstream": "node ./scripts/check-nerd-fonts-updates.mjs",
