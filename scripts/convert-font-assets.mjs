@@ -108,7 +108,7 @@ function getSourceDirectories() {
 }
 
 /**
- * Run nerd-font-woff2 conversion for all local source families.
+ * Run nerd-fonts-woff2 conversion for all local source families.
  *
  * @returns {void}
  */

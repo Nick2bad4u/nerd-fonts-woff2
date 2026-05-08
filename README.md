@@ -1,4 +1,4 @@
-# nerd-font-woff2
+# nerd-fonts-woff2
 
 [![npm license.](https://flat.badgen.net/npm/license/nerd-fonts-woff2?color=purple)](https://github.com/Nick2bad4u/nerd-fonts-woff2/blob/main/LICENSE) [![npm total downloads.](https://flat.badgen.net/npm/dt/nerd-fonts-woff2?color=pink)](https://www.npmjs.com/package/nerd-fonts-woff2) [![latest GitHub release.](https://flat.badgen.net/github/release/Nick2bad4u/nerd-fonts-woff2?color=cyan)](https://github.com/Nick2bad4u/nerd-fonts-woff2/releases) [![GitHub stars.](https://flat.badgen.net/github/stars/Nick2bad4u/nerd-fonts-woff2?color=yellow)](https://github.com/Nick2bad4u/nerd-fonts-woff2/stargazers) [![GitHub forks.](https://flat.badgen.net/github/forks/Nick2bad4u/nerd-fonts-woff2?color=green)](https://github.com/Nick2bad4u/nerd-fonts-woff2/forks) [![GitHub open issues.](https://flat.badgen.net/github/open-issues/Nick2bad4u/nerd-fonts-woff2?color=red)](https://github.com/Nick2bad4u/nerd-fonts-woff2/issues) [![codecov.](https://flat.badgen.net/codecov/github/Nick2bad4u/nerd-fonts-woff2?color=blue)](https://codecov.io/gh/Nick2bad4u/nerd-fonts-woff2)
 
@@ -75,9 +75,9 @@ The npm package ships the **CLI conversion tool only** — font files are not bu
 To use fonts in a website or app, use the CDN URLs above (no install needed).
 
 ```bash
-npm install nerd-font-woff2
+npm install nerd-fonts-woff2
 # or globally
-npm install -g nerd-font-woff2
+npm install -g nerd-fonts-woff2
 ```
 
 Package size: **\~86 KB unpacked** (just the CLI binary + compiled JS).
@@ -94,9 +94,9 @@ The CLI converts local TTF/OTF font files into WOFF2 format.
 ### Usage
 
 ```bash
-npx nerd-font-woff2 --source-dir <path> [options]
+npx nerd-fonts-woff2 --source-dir <path> [options]
 # or if installed globally:
-nerd-font-woff2 --source-dir <path> [options]
+nerd-fonts-woff2 --source-dir <path> [options]
 ```
 
 ### Core options
@@ -137,22 +137,22 @@ nerd-font-woff2 --source-dir <path> [options]
 
 ```bash
 # Dry run — plan only, no files written (safe default)
-npx nerd-font-woff2 --source-dir ./fonts/original --dry-run
+npx nerd-fonts-woff2 --source-dir ./fonts/original --dry-run
 
 # Convert with explicit safety confirmation
-npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm
+npx nerd-fonts-woff2 --source-dir ./fonts/original --convert --confirm
 
 # Faster — 4 concurrent workers, 2 min timeout per file
-npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm --concurrency 4 --timeout 120000
+npx nerd-fonts-woff2 --source-dir ./fonts/original --convert --confirm --concurrency 4 --timeout 120000
 
 # Machine-readable JSON output + explicit index file path
-npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm --json --index-file ./fonts/woff2/index.json
+npx nerd-fonts-woff2 --source-dir ./fonts/original --convert --confirm --json --index-file ./fonts/woff2/index.json
 
 # Use a manifest config file instead of flags
-npx nerd-font-woff2 --manifest ./nerd-font-woff2.config.json --convert --confirm --json
+npx nerd-fonts-woff2 --manifest ./nerd-fonts-woff2.config.json --convert --confirm --json
 
 # Convert multiple source directories
-npx nerd-font-woff2 --source-dir ./fonts/originals,./fonts/extras --convert --confirm
+npx nerd-fonts-woff2 --source-dir ./fonts/originals,./fonts/extras --convert --confirm
 ```
 
 ---
@@ -160,86 +160,76 @@ npx nerd-font-woff2 --source-dir ./fonts/originals,./fonts/extras --convert --co
 ## Available font families
 
 All families from [Nerd Fonts v3.4.0](https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.4.0) are included.
-Browse the full list in the [`fonts/woff2/`](./fonts/woff2) directory.
 
-Popular families:
+Browse the full list in the [`fonts/woff2/`](./fonts/woff2) directory, or search the [interactive browser](https://nick2bad4u.github.io/nerd-fonts-woff2/).
 
-| Family                | Folder name             |
-| --------------------- | ----------------------- |
-| 0xProto               | `0xProto`               |
-| 3270                  | `3270`                  |
-| Agave                 | `Agave`                 |
-| AnonymousPro          | `AnonymousPro`          |
-| Arimo                 | `Arimo`                 |
-| AurulentSansMono      | `AurulentSansMono`      |
-| BigBlueTerminal       | `BigBlueTerminal`       |
-| BitstreamVeraSansMono | `BitstreamVeraSansMono` |
-| CascadiaCode          | `CascadiaCode`          |
-| CaskaydiaCove         | `CaskaydiaCove`         |
-| CaskaydiaMono         | `CaskaydiaMono`         |
-| CodeNewRoman          | `CodeNewRoman`          |
-| ComicShannsMono       | `ComicShannsMono`       |
-| CommitMono            | `CommitMono`            |
-| Cousine               | `Cousine`               |
-| D2Coding              | `D2Coding`              |
-| DaddyTimeMono         | `DaddyTimeMono`         |
-| DejaVuSansMono        | `DejaVuSansMono`        |
-| DroidSansMono         | `DroidSansMono`         |
-| EnvyCodeR             | `EnvyCodeR`             |
-| FantasqueSansMono     | `FantasqueSansMono`     |
-| FiraCode              | `FiraCode`              |
-| FiraMono              | `FiraMono`              |
-| GeistMono             | `GeistMono`             |
-| Go-Mono               | `Go-Mono`               |
-| Gohu                  | `Gohu`                  |
-| GohuFont              | `GohuFont`              |
-| Hack                  | `Hack`                  |
-| Hasklig               | `Hasklig`               |
-| HeavyData             | `HeavyData`             |
-| Hermit                | `Hermit`                |
-| iA-Writer             | `iA-Writer`             |
-| IBMPlexMono           | `IBMPlexMono`           |
-| Inconsolata           | `Inconsolata`           |
-| InconsolataGo         | `InconsolataGo`         |
-| InconsolataLGC        | `InconsolataLGC`        |
-| IntelOneMono          | `IntelOneMono`          |
-| Iosevka               | `Iosevka`               |
-| IosevkaTerm           | `IosevkaTerm`           |
-| IosevkaTermSlab       | `IosevkaTermSlab`       |
-| JetBrainsMono         | `JetBrainsMono`         |
-| Lekton                | `Lekton`                |
-| LiberationMono        | `LiberationMono`        |
-| Lilex                 | `Lilex`                 |
-| MartianMono           | `MartianMono`           |
-| Meslo                 | `Meslo`                 |
-| Monofur               | `Monofur`               |
-| Monoid                | `Monoid`                |
-| Mononoki              | `Mononoki`              |
-| MPlus                 | `MPlus`                 |
-| NerdFontsSymbolsOnly  | `NerdFontsSymbolsOnly`  |
-| Noto                  | `Noto`                  |
-| OpenDyslexic          | `OpenDyslexic`          |
-| Overpass              | `Overpass`              |
-| ProFont               | `ProFont`               |
-| ProggyClean           | `ProggyClean`           |
-| Recursive             | `Recursive`             |
-| RobotoMono            | `RobotoMono`            |
-| ShareTechMono         | `ShareTechMono`         |
-| SourceCodePro         | `SourceCodePro`         |
-| SpaceMono             | `SpaceMono`             |
-| Terminus              | `Terminus`              |
-| Tinos                 | `Tinos`                 |
-| Ubuntu                | `Ubuntu`                |
-| UbuntuMono            | `UbuntuMono`            |
-| UbuntuSans            | `UbuntuSans`            |
-| VictorMono            | `VictorMono`            |
-| ZedMono               | `ZedMono`               |
+Popular families by `reserved font name` (see [Reserved Font Name mechanism](https://openfontlicense.org/webfonts-and-reserved-font-names/)).
 
----
+For example, the `Monaspice Nerd Font` family is available as `Monaspace` in the URL path and file names:
+
+![Font Name vs Reserved Font Name](assets/image.png)
+
+| Family                                                                                                              | Preview Font                                                                            | Folder                                                         |
+| ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [3270](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/3270.zip)                                   | [Preview Font](https://www.programmingfonts.org/#font3270)                              | [`3270`](./fonts/woff2/3270)                                   |
+| [Agave](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Agave.zip)                                 | [Preview Font](https://www.programmingfonts.org/#agave)                                 | [`Agave`](./fonts/woff2/Agave)                                 |
+| [AnonymousPro](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/AnonymousPro.zip)                   | [Preview Font](https://www.programmingfonts.org/#anonymous-pro)                         | [`AnonymousPro`](./fonts/woff2/AnonymousPro)                   |
+| [Arimo](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Arimo.zip)                                 | [Preview Font](https://fonts.google.com/?query=arimo)                                   | [`Arimo`](./fonts/woff2/Arimo)                                 |
+| [AurulentSansMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/AurulentSansMono.zip)           | [Preview Font](https://www.programmingfonts.org/#aurulent)                              | [`AurulentSansMono`](./fonts/woff2/AurulentSansMono)           |
+| [BigBlueTerminal](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/BigBlueTerminal.zip)             | [Preview Font](https://www.programmingfonts.org/#bigblue-terminal)                      | [`BigBlueTerminal`](./fonts/woff2/BigBlueTerminal)             |
+| [BitstreamVeraSansMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/BitstreamVeraSansMono.zip) | [Preview Font](https://www.programmingfonts.org/#bitstream-vera)                        | [`BitstreamVeraSansMono`](./fonts/woff2/BitstreamVeraSansMono) |
+| [CascadiaCode](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/CascadiaCode.zip)                   | [Preview Font](https://www.programmingfonts.org/#cascadia-code)                         | [`CascadiaCode`](./fonts/woff2/CascadiaCode)                   |
+| [CodeNewRoman](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/CodeNewRoman.zip)                   | [Preview Font](https://www.programmingfonts.org/#code-new-roman)                        | [`CodeNewRoman`](./fonts/woff2/CodeNewRoman)                   |
+| [ComicShannsMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/ComicShannsMono.zip)             | [Preview Font](https://github.com/shannpersand/comic-shanns-mono)                       | [`ComicShannsMono`](./fonts/woff2/ComicShannsMono)             |
+| [Cousine](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Cousine.zip)                             | [Preview Font](https://www.programmingfonts.org/#cousine)                               | [`Cousine`](./fonts/woff2/Cousine)                             |
+| [DaddyTimeMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/DaddyTimeMono.zip)                 | [Preview Font](https://www.programmingfonts.org/#daddytimemono)                         | [`DaddyTimeMono`](./fonts/woff2/DaddyTimeMono)                 |
+| [DejaVuSansMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/DejaVuSansMono.zip)               | [Preview Font](https://www.programmingfonts.org/#dejavu)                                | [`DejaVuSansMono`](./fonts/woff2/DejaVuSansMono)               |
+| [DroidSansMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/DroidSansMono.zip)                 | [Preview Font](https://www.programmingfonts.org/#droid-sans)                            | [`DroidSansMono`](./fonts/woff2/DroidSansMono)                 |
+| [EnvyCodeR](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/EnvyCodeR.zip)                         | [Preview Font](https://www.programmingfonts.org/#envy-code-r)                           | [`EnvyCodeR`](./fonts/woff2/EnvyCodeR)                         |
+| [FantasqueSansMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/FantasqueSansMono.zip)         | [Preview Font](https://www.programmingfonts.org/#fantasque-sans)                        | [`FantasqueSansMono`](./fonts/woff2/FantasqueSansMono)         |
+| [FiraCode](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/FiraCode.zip)                           | [Preview Font](https://www.programmingfonts.org/#firacode)                              | [`FiraCode`](./fonts/woff2/FiraCode)                           |
+| [FiraMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/FiraMono.zip)                           | [Preview Font](https://www.programmingfonts.org/#fira)                                  | [`FiraMono`](./fonts/woff2/FiraMono)                           |
+| [Go-Mono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Go-Mono.zip)                             | [Preview Font](https://www.programmingfonts.org/#go-mono)                               | [`Go-Mono`](./fonts/woff2/Go-Mono)                             |
+| [Gohu](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Gohu.zip)                                   | [Preview Font](https://www.programmingfonts.org/#gohufont-14)                           | [`Gohu`](./fonts/woff2/Gohu)                                   |
+| [Hack](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Hack.zip)                                   | [Preview Font](https://www.programmingfonts.org/#hack)                                  | [`Hack`](./fonts/woff2/Hack)                                   |
+| [Hasklig](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Hasklig.zip)                             | [Preview Font](https://www.programmingfonts.org/#hasklig)                               | [`Hasklig`](./fonts/woff2/Hasklig)                             |
+| [HeavyData](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/HeavyData.zip)                         | [Preview Font](https://github.com/soji-omori/HeavyData-font)                            | [`HeavyData`](./fonts/woff2/HeavyData)                         |
+| [Hermit](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Hermit.zip)                               | [Preview Font](https://www.programmingfonts.org/#hermit)                                | [`Hermit`](./fonts/woff2/Hermit)                               |
+| [iA-Writer](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/iA-Writer.zip)                         | [Preview Font](https://www.programmingfonts.org/#ia-writer-mono)                        | [`iA-Writer`](./fonts/woff2/iA-Writer)                         |
+| [IBMPlexMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/IBMPlexMono.zip)                     | [Preview Font](https://www.programmingfonts.org/#plex-mono)                             | [`IBMPlexMono`](./fonts/woff2/IBMPlexMono)                     |
+| [Inconsolata](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Inconsolata.zip)                     | [Preview Font](https://www.programmingfonts.org/#inconsolata)                           | [`Inconsolata`](./fonts/woff2/Inconsolata)                     |
+| [InconsolataGo](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/InconsolataGo.zip)                 | [Preview Font](https://www.programmingfonts.org/#inconsolata-go)                        | [`InconsolataGo`](./fonts/woff2/InconsolataGo)                 |
+| [InconsolataLGC](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/InconsolataLGC.zip)               | [Preview Font](https://www.programmingfonts.org/#inconsolata)                           | [`InconsolataLGC`](./fonts/woff2/InconsolataLGC)               |
+| [Iosevka](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Iosevka.zip)                             | [Preview Font](https://www.programmingfonts.org/#iosevka)                               | [`Iosevka`](./fonts/woff2/Iosevka)                             |
+| [IosevkaTerm](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/IosevkaTerm.zip)                     | [Preview Font](https://www.programmingfonts.org/#iosevka)                               | [`IosevkaTerm`](./fonts/woff2/IosevkaTerm)                     |
+| [JetBrainsMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip)                 | [Preview Font](https://www.programmingfonts.org/#jetbrainsmono)                         | [`JetBrainsMono`](./fonts/woff2/JetBrainsMono)                 |
+| [Lekton](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Lekton.zip)                               | [Preview Font](https://www.programmingfonts.org/#lekton)                                | [`Lekton`](./fonts/woff2/Lekton)                               |
+| [LiberationMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/LiberationMono.zip)               | [Preview Font](https://www.programmingfonts.org/#liberation)                            | [`LiberationMono`](./fonts/woff2/LiberationMono)               |
+| [Lilex](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Lilex.zip)                                 | [Preview Font](https://www.programmingfonts.org/#lilex)                                 | [`Lilex`](./fonts/woff2/Lilex)                                 |
+| [Meslo](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Meslo.zip)                                 | [Preview Font](https://www.programmingfonts.org/#meslo)                                 | [`Meslo`](./fonts/woff2/Meslo)                                 |
+| [Monofur](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Monofur.zip)                             | [Preview Font](https://www.programmingfonts.org/#monofur)                               | [`Monofur`](./fonts/woff2/Monofur)                             |
+| [Monoid](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Monoid.zip)                               | [Preview Font](https://www.programmingfonts.org/#monoid)                                | [`Monoid`](./fonts/woff2/Monoid)                               |
+| [Mononoki](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Mononoki.zip)                           | [Preview Font](https://www.programmingfonts.org/#mononoki)                              | [`Mononoki`](./fonts/woff2/Mononoki)                           |
+| [MPlus](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/MPlus.zip)                                 | [Preview Font](https://www.programmingfonts.org/#mplus)                                 | [`MPlus`](./fonts/woff2/MPlus)                                 |
+| [NerdFontsSymbolsOnly](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/NerdFontsSymbolsOnly.zip)   | [Preview Font](https://github.com/ryanoasis/nerd-fonts/wiki/Glyph-Sets-and-Code-Points) | [`NerdFontsSymbolsOnly`](./fonts/woff2/NerdFontsSymbolsOnly)   |
+| [Noto](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Noto.zip)                                   | [Preview Font](https://www.programmingfonts.org/#noto)                                  | [`Noto`](./fonts/woff2/Noto)                                   |
+| [OpenDyslexic](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/OpenDyslexic.zip)                   | [Preview Font](https://www.programmingfonts.org/#opendyslexic)                          | [`OpenDyslexic`](./fonts/woff2/OpenDyslexic)                   |
+| [Overpass](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Overpass.zip)                           | [Preview Font](https://www.programmingfonts.org/#overpass)                              | [`Overpass`](./fonts/woff2/Overpass)                           |
+| [ProFont](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/ProFont.zip)                             | [Preview Font](https://www.programmingfonts.org/#profont)                               | [`ProFont`](./fonts/woff2/ProFont)                             |
+| [ProggyClean](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/ProggyClean.zip)                     | [Preview Font](https://www.programmingfonts.org/#proggy-clean)                          | [`ProggyClean`](./fonts/woff2/ProggyClean)                     |
+| [RobotoMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/RobotoMono.zip)                       | [Preview Font](https://www.programmingfonts.org/#roboto)                                | [`RobotoMono`](./fonts/woff2/RobotoMono)                       |
+| [ShareTechMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/ShareTechMono.zip)                 | [Preview Font](https://www.programmingfonts.org/#share-tech)                            | [`ShareTechMono`](./fonts/woff2/ShareTechMono)                 |
+| [SourceCodePro](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/SourceCodePro.zip)                 | [Preview Font](https://www.programmingfonts.org/#source-code-pro)                       | [`SourceCodePro`](./fonts/woff2/SourceCodePro)                 |
+| [SpaceMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/SpaceMono.zip)                         | [Preview Font](https://www.programmingfonts.org/#space)                                 | [`SpaceMono`](./fonts/woff2/SpaceMono)                         |
+| [Terminus](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Terminus.zip)                           | [Preview Font](https://www.programmingfonts.org/#terminus)                              | [`Terminus`](./fonts/woff2/Terminus)                           |
+| [Tinos](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Tinos.zip)                                 | [Preview Font](https://fonts.google.com/?query=tinos)                                   | [`Tinos`](./fonts/woff2/Tinos)                                 |
+| [Ubuntu](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/Ubuntu.zip)                               | [Preview Font](https://fonts.google.com/?query=ubuntu)                                  | [`Ubuntu`](./fonts/woff2/Ubuntu)                               |
+| [UbuntuMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/UbuntuMono.zip)                       | [Preview Font](https://www.programmingfonts.org/#ubuntu)                                | [`UbuntuMono`](./fonts/woff2/UbuntuMono)                       |
+| [VictorMono](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/VictorMono.zip)                       | [Preview Font](https://www.programmingfonts.org/#victor-mono)                           | [`VictorMono`](./fonts/woff2/VictorMono)                       |
 
 ## What are Nerd Fonts?
 
-[Nerd Fonts](https://www.nerdfonts.com/) patches developer-targeted fonts with a large number of glyphs (icons) from popular icon sets — including Devicons, Font Awesome, Material Design Icons, and many others.
+[Nerd Fonts](https://www.nerdfonts.com/) patches developer-targeted fonts with a large number of glyphs (icons) from popular icon sets — including Devicons, Font Awesome, Material Design Icons, and plenty of others.
 
 They are widely used in terminal emulators, code editors, and shell prompts (Starship, Oh-My-Zsh, Powerlevel10k, etc.).
 
