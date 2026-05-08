@@ -4,6 +4,12 @@ const searchInput = /** @type {HTMLInputElement} */ (
 const versionInput = /** @type {HTMLInputElement} */ (
     document.getElementById("version")
 );
+const styleFilterInput = /** @type {HTMLSelectElement} */ (
+    document.getElementById("style_filter")
+);
+const variantFilterInput = /** @type {HTMLSelectElement} */ (
+    document.getElementById("variant_filter")
+);
 const statusNode = /** @type {HTMLParagraphElement} */ (
     document.getElementById("status")
 );
@@ -21,6 +27,15 @@ const statFilesNode = /** @type {HTMLElement} */ (
 );
 const statVersionNode = /** @type {HTMLElement} */ (
     document.getElementById("stat_version")
+);
+const linkModalNode = /** @type {HTMLElement} */ (
+    document.getElementById("link_modal")
+);
+const closeLinkModalButton = /** @type {HTMLButtonElement} */ (
+    document.getElementById("close_link_modal")
+);
+const linkItemsNode = /** @type {HTMLElement} */ (
+    document.getElementById("link_items")
 );
 
 /**
@@ -44,9 +59,93 @@ function slugify(value) {
  * @returns {void}
  */
 function renderStats(version, familyCount, fileCount) {
-    statFamiliesNode.textContent = `Families: ${familyCount.toLocaleString()}`;
-    statFilesNode.textContent = `Files: ${fileCount.toLocaleString()}`;
-    statVersionNode.textContent = `Version: ${version}`;
+    statFamiliesNode.textContent = `🧬 Families: ${familyCount.toLocaleString()}`;
+    statFilesNode.textContent = `📦 Files: ${fileCount.toLocaleString()}`;
+    statVersionNode.textContent = `🏷️ Version: ${version}`;
+}
+
+/**
+ * @param {string} text
+ *
+ * @returns {Promise<void>}
+ */
+async function copyText(text) {
+    await navigator.clipboard.writeText(text);
+}
+
+/**
+ * @returns {void}
+ */
+function closeLinkModal() {
+    linkModalNode.dataset["open"] = "false";
+    linkItemsNode.replaceChildren();
+}
+
+/**
+ * @param {{ label: string; logo: string; url: string }[]} links
+ * @param {string} fileName
+ *
+ * @returns {void}
+ */
+function openLinkModal(links, fileName) {
+    linkItemsNode.replaceChildren();
+
+    for (const linkDef of links) {
+        const item = document.createElement("article");
+        item.className = "link-item";
+
+        const left = document.createElement("div");
+        left.className = "link-item-left";
+
+        const logo = document.createElement("span");
+        logo.className = "cdn-logo";
+        logo.textContent = linkDef.logo;
+        left.append(logo);
+
+        const label = document.createElement("div");
+        label.className = "link-item-label";
+        label.textContent = linkDef.label;
+        left.append(label);
+        item.append(left);
+
+        const actions = document.createElement("div");
+        actions.className = "file-actions";
+
+        const openButton = document.createElement("a");
+        openButton.className = "btn";
+        openButton.href = linkDef.url;
+        openButton.target = "_blank";
+        openButton.rel = "noopener noreferrer";
+        openButton.textContent = "↗ Open";
+        actions.append(openButton);
+
+        const copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.className = "btn btn-primary";
+        copyButton.textContent = "📋 Copy";
+        copyButton.addEventListener("click", () => {
+            copyText(linkDef.url)
+                .then(() => {
+                    copyButton.textContent = "✅ Copied";
+                    setTimeout(() => {
+                        copyButton.textContent = "📋 Copy";
+                    }, 1200);
+                })
+                .catch(() => {
+                    copyButton.textContent = "⚠️ Failed";
+                });
+        });
+        actions.append(copyButton);
+
+        item.append(actions);
+        linkItemsNode.append(item);
+    }
+
+    linkModalNode.dataset["open"] = "true";
+    const titleNode = document.getElementById("link_modal_title");
+    if (titleNode instanceof HTMLElement) {
+        titleNode.textContent = `🔗 CDN links for ${fileName}`;
+    }
 }
 
 /**
@@ -113,12 +212,114 @@ function toCdnUrl(version, relativePath) {
     return `https://cdn.jsdelivr.net/gh/Nick2bad4u/nerd-fonts-woff2@${version}/${relativePath}`;
 }
 
+/**
+ * @param {string} version
+ * @param {string} relativePath
+ *
+ * @returns {{ label: string; logo: string; url: string }[]}
+ */
+function buildPopularLinks(version, relativePath) {
+    return [
+        {
+            label: "jsDelivr (GitHub)",
+            logo: "JS",
+            url: toCdnUrl(version, relativePath),
+        },
+        {
+            label: "Raw GitHub",
+            logo: "GH",
+            url: `https://raw.githubusercontent.com/Nick2bad4u/nerd-fonts-woff2/${version}/${relativePath}`,
+        },
+        {
+            label: "jsDelivr (npm)",
+            logo: "NPM",
+            url: `https://cdn.jsdelivr.net/npm/nerd-font-woff2@${version}/${relativePath}`,
+        },
+        {
+            label: "unpkg (npm)",
+            logo: "U",
+            url: `https://unpkg.com/nerd-font-woff2@${version}/${relativePath}`,
+        },
+        {
+            label: "Raw Githack",
+            logo: "GK",
+            url: `https://rawcdn.githack.com/Nick2bad4u/nerd-fonts-woff2/${version}/${relativePath}`,
+        },
+    ];
+}
+
+/**
+ * @param {string} fileName
+ *
+ * @returns {"bold" | "bold-italic" | "italic" | "regular"}
+ */
+function classifyStyle(fileName) {
+    const lowered = fileName.toLowerCase();
+    const hasBold = lowered.includes("bold");
+    const hasItalic = lowered.includes("italic") || lowered.includes("oblique");
+
+    if (hasBold && hasItalic) {
+        return "bold-italic";
+    }
+
+    if (hasBold) {
+        return "bold";
+    }
+
+    if (hasItalic) {
+        return "italic";
+    }
+
+    return "regular";
+}
+
+/**
+ * @param {string} fileName
+ *
+ * @returns {"mono" | "propo" | "regular"}
+ */
+function classifyVariant(fileName) {
+    const lowered = fileName.toLowerCase();
+    if (lowered.includes("mono")) {
+        return "mono";
+    }
+
+    if (lowered.includes("propo")) {
+        return "propo";
+    }
+
+    return "regular";
+}
+
+/**
+ * @param {{
+ *     family: string;
+ *     fileName: string;
+ *     outputPath: string;
+ *     converted: boolean;
+ * }} entry
+ * @param {string} styleFilter
+ * @param {string} variantFilter
+ *
+ * @returns {boolean}
+ */
+function matchesFilters(entry, styleFilter, variantFilter) {
+    const style = classifyStyle(entry.fileName);
+    const variant = classifyVariant(entry.fileName);
+    const styleOk = styleFilter === "all" || styleFilter === style;
+    const variantOk = variantFilter === "all" || variantFilter === variant;
+    return styleOk && variantOk;
+}
+
 function render() {
     const query = searchInput.value.trim().toLowerCase();
     const version = versionInput.value.trim() || "main";
+    const styleFilter = styleFilterInput.value;
+    const variantFilter = variantFilterInput.value;
     const filtered = entries.filter((entry) => {
         const haystack = `${entry.family} ${entry.fileName}`.toLowerCase();
-        return query.length === 0 || haystack.includes(query);
+        const queryOk = query.length === 0 || haystack.includes(query);
+        return queryOk && matchesFilters(entry, styleFilter, variantFilter);
     });
 
     const grouped = new Map();
@@ -170,29 +371,64 @@ function render() {
                 entry.family,
                 entry.fileName
             );
-            const cdnUrl = toCdnUrl(version, relativePath);
+            const cdnLinks = buildPopularLinks(version, relativePath);
 
             const row = document.createElement("article");
             row.className = "file";
 
+            const fileTop = document.createElement("div");
+            fileTop.className = "file-top";
+
             const fileName = document.createElement("div");
             fileName.className = "file-name";
             fileName.textContent = entry.fileName;
-            row.append(fileName);
+            fileTop.append(fileName);
 
-            const cdnLink = document.createElement("a");
-            cdnLink.href = cdnUrl;
-            cdnLink.textContent = `CDN: ${cdnUrl}`;
-            cdnLink.target = "_blank";
-            cdnLink.rel = "noopener noreferrer";
-            row.append(cdnLink);
+            const fileBadges = document.createElement("div");
+            fileBadges.className = "file-badges";
+
+            const styleBadge = document.createElement("span");
+            styleBadge.className = "badge";
+            styleBadge.textContent = classifyStyle(entry.fileName);
+            fileBadges.append(styleBadge);
+
+            const variantBadge = document.createElement("span");
+            variantBadge.className = "badge";
+            variantBadge.textContent = classifyVariant(entry.fileName);
+            fileBadges.append(variantBadge);
+
+            fileTop.append(fileBadges);
+            row.append(fileTop);
+
+            const actions = document.createElement("div");
+            actions.className = "file-actions";
+
+            const openLinksButton = document.createElement("button");
+            openLinksButton.type = "button";
+            openLinksButton.className = "btn btn-primary";
+            openLinksButton.textContent = "🔗 Copy CDN links";
+            openLinksButton.addEventListener("click", () => {
+                openLinkModal(cdnLinks, entry.fileName);
+            });
+            actions.append(openLinksButton);
 
             const repoLink = document.createElement("a");
             repoLink.href = `./${relativePath}`;
-            repoLink.textContent = `Repo file: ${relativePath}`;
+            repoLink.className = "btn";
+            repoLink.textContent = "📁 Open repo file";
             repoLink.target = "_blank";
             repoLink.rel = "noopener noreferrer";
-            row.append(repoLink);
+            actions.append(repoLink);
+
+            const originalFamilyLink = document.createElement("a");
+            originalFamilyLink.href = `https://github.com/ryanoasis/nerd-fonts/tree/master/patched-fonts/${encodeURIComponent(entry.family)}`;
+            originalFamilyLink.className = "btn";
+            originalFamilyLink.textContent = "🧷 Original Nerd Font family";
+            originalFamilyLink.target = "_blank";
+            originalFamilyLink.rel = "noopener noreferrer";
+            actions.append(originalFamilyLink);
+
+            row.append(actions);
 
             files.append(row);
         }
@@ -244,4 +480,28 @@ versionInput.addEventListener("input", () => {
     render();
 });
 
-loadIndex();
+styleFilterInput.addEventListener("change", () => {
+    render();
+});
+
+variantFilterInput.addEventListener("change", () => {
+    render();
+});
+
+closeLinkModalButton.addEventListener("click", () => {
+    closeLinkModal();
+});
+
+linkModalNode.addEventListener("click", (event) => {
+    if (event.target === linkModalNode) {
+        closeLinkModal();
+    }
+});
+
+// Ensure this file is treated as an ES module by static analyzers.
+const moduleUrl = import.meta.url;
+if (moduleUrl.length === 0) {
+    statusNode.textContent = "";
+}
+
+await loadIndex();

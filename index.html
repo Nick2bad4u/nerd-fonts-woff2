@@ -123,6 +123,10 @@
                 font-size: 0.85rem;
             }
 
+            .hero-icon {
+                margin-inline-end: 0.45rem;
+            }
+
             .controls {
                 display: grid;
                 gap: 0.9rem;
@@ -141,7 +145,8 @@
                 font-size: 0.88rem;
             }
 
-            input {
+            input,
+            select {
                 padding: 0.65rem 0.8rem;
                 border-radius: 0.5rem;
                 border: 1px solid var(--border);
@@ -150,7 +155,8 @@
                 outline: none;
             }
 
-            input:focus {
+            input:focus,
+            select:focus {
                 border-color: var(--accent);
                 box-shadow: 0 0 0 3px rgba(90, 169, 255, 0.25);
             }
@@ -247,6 +253,74 @@
                 gap: 0.3rem;
             }
 
+            .file-top {
+                display: flex;
+                justify-content: space-between;
+                align-items: start;
+                gap: 0.5rem;
+            }
+
+            .file-badges {
+                display: flex;
+                gap: 0.3rem;
+                flex-wrap: wrap;
+            }
+
+            .badge {
+                font-size: 0.7rem;
+                color: var(--muted);
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                padding: 0.14rem 0.4rem;
+                background: rgba(21, 31, 58, 0.7);
+            }
+
+            .file-actions {
+                display: flex;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+                margin-top: 0.15rem;
+            }
+
+            .btn {
+                border: 1px solid var(--border);
+                background: rgba(17, 26, 50, 0.85);
+                color: var(--text);
+                border-radius: 0.45rem;
+                padding: 0.34rem 0.6rem;
+                font-size: 0.78rem;
+                text-decoration: none;
+                cursor: pointer;
+            }
+
+            .btn:hover {
+                border-color: var(--accent);
+                color: #ffffff;
+                background: rgba(34, 52, 95, 0.9);
+            }
+
+            .btn-primary {
+                border-color: rgba(102, 240, 196, 0.45);
+                background: rgba(23, 55, 72, 0.75);
+                color: #d8fff2;
+            }
+
+            .btn-primary:hover {
+                border-color: rgba(102, 240, 196, 0.75);
+                background: rgba(28, 67, 87, 0.95);
+            }
+
+            .primary-link {
+                color: var(--accent);
+                text-decoration: none;
+                font-size: 0.82rem;
+                word-break: break-all;
+            }
+
+            .primary-link:hover {
+                text-decoration: underline;
+            }
+
             .file-name {
                 font-family: Consolas, monospace;
                 font-size: 0.85rem;
@@ -280,7 +354,98 @@
                 display: none;
                 visibility: hidden;
             }
+
+            .link-modal {
+                position: fixed;
+                inset: 0;
+                background: rgba(3, 8, 18, 0.72);
+                display: none;
+                align-items: center;
+                justify-content: center;
+                z-index: 50;
+                padding: 1rem;
+            }
+
+            .link-modal[data-open="true"] {
+                display: flex;
+            }
+
+            .link-modal-panel {
+                width: min(520px, 96vw);
+                max-height: 78vh;
+                overflow: auto;
+                border: 1px solid var(--border);
+                border-radius: 0.95rem;
+                background: linear-gradient(
+                    165deg,
+                    rgba(23, 34, 62, 0.98),
+                    rgba(13, 19, 38, 0.98)
+                );
+                box-shadow: 0 24px 60px var(--shadow);
+                padding: 1rem;
+            }
+
+            .link-modal-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .link-modal-head h3 {
+                margin: 0;
+                font-size: 1rem;
+            }
+
+            .link-items {
+                display: grid;
+                gap: 0.55rem;
+            }
+
+            .link-item {
+                border: 1px solid var(--border);
+                border-radius: 0.6rem;
+                background: rgba(16, 23, 44, 0.82);
+                padding: 0.6rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            .link-item-label {
+                color: var(--accent-2);
+                font-size: 0.82rem;
+                font-weight: 600;
+            }
+
+            .link-item-left {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                min-width: 0;
+            }
+
+            .cdn-logo {
+                width: 1.65rem;
+                height: 1.65rem;
+                border-radius: 999px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--border);
+                background: rgba(21, 31, 58, 0.8);
+                color: #dce8ff;
+                font-size: 0.7rem;
+                font-weight: 700;
+            }
         </style>
+        <link
+            type="image/svg+xml"
+            href="./assets/woff2-favicon.svg"
+            rel="icon"
+        />
         <meta
             content="Searchable browser for Nerd Fonts WOFF2 assets published in this repository."
             name="description"
@@ -318,7 +483,10 @@
 
         <header class="header">
             <section class="hero">
-                <h1>nerd-font-woff2 browser</h1>
+                <h1
+                    ><span class="hero-icon">🔤</span>nerd-font-woff2
+                    browser</h1
+                >
                 <p>
                     Browse, search, and copy links for all generated WOFF2
                     assets in this repository. Data source:
@@ -328,18 +496,20 @@
                     <span
                         id="stat_families"
                         class="stat-pill"
-                        >Families: -</span
+                        >🧬 Families: -</span
                     >
                     <span
                         id="stat_files"
                         class="stat-pill"
-                        >Files: -</span
+                        >📦 Files: -</span
                     >
                     <span
                         id="stat_version"
                         class="stat-pill"
-                        >Version: main</span
+                        >🏷️ Version: main</span
                     >
+                    <span class="stat-pill">⚡ WOFF2 ready</span>
+                    <span class="stat-pill">🔗 Multi-CDN links</span>
                 </div>
             </section>
         </header>
@@ -361,6 +531,29 @@
                         type="text"
                         value="main"
                     />
+                </label>
+                <label>
+                    Style filter
+                    <select id="style_filter">
+                        <option value="all">All styles</option>
+                        <option value="regular"
+                            >Regular (non-bold/non-italic)</option
+                        >
+                        <option value="italic">Italic/Oblique</option>
+                        <option value="bold">Bold (non-italic)</option>
+                        <option value="bold-italic">Bold + Italic</option>
+                    </select>
+                </label>
+                <label>
+                    Family variant filter
+                    <select id="variant_filter">
+                        <option value="all">All variants</option>
+                        <option value="regular"
+                            >Regular (non-mono/non-propo)</option
+                        >
+                        <option value="mono">Mono</option>
+                        <option value="propo">Propo</option>
+                    </select>
                 </label>
             </section>
 
@@ -386,6 +579,30 @@
                 ></section>
             </section>
         </main>
+
+        <dialog
+            id="link_modal"
+            class="link-modal"
+            aria-labelledby="link_modal_title"
+            data-open="false"
+        >
+            <section class="link-modal-panel">
+                <div class="link-modal-head">
+                    <h3 id="link_modal_title">🔗 CDN links</h3>
+                    <button
+                        id="close_link_modal"
+                        type="button"
+                        class="btn"
+                    >
+                        ✖ Close
+                    </button>
+                </div>
+                <div
+                    id="link_items"
+                    class="link-items"
+                ></div>
+            </section>
+        </dialog>
 
         <script
             type="module"
