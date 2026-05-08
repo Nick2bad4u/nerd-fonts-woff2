@@ -71,74 +71,88 @@ You can also browse a searchable index page on GitHub Pages: [`/index.html`](./i
 
 ## Install via npm
 
-If you use a bundler (Webpack, Vite, etc.) or a Node.js project, you can install the fonts as an npm package:
+The npm package ships the **CLI conversion tool only** — font files are not bundled.
+To use fonts in a website or app, use the CDN URLs above (no install needed).
 
 ```bash
 npm install nerd-font-woff2
+# or globally
+npm install -g nerd-font-woff2
 ```
 
-Then reference the files from `node_modules`:
+Package size: **\~86 KB unpacked** (just the CLI binary + compiled JS).
 
-```css
-/* Vite / webpack — import the font file directly */
-@font-face {
-  font-family: "JetBrains Mono Nerd";
-  src: url("nerd-font-woff2/fonts/woff2/JetBrainsMono/JetBrainsMonoNerdFont-Regular.woff2")
-    format("woff2");
-  font-display: swap;
-}
-```
-
-Or read them in Node.js:
-
-```js
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-const pkgDir = join(require.resolve("nerd-font-woff2/package.json"), "..");
-const fontBuffer = readFileSync(
-  join(pkgDir, "fonts", "woff2", "JetBrainsMono", "JetBrainsMonoNerdFont-Regular.woff2")
-);
-```
+> The fonts themselves are served from CDN (jsDelivr, unpkg, Raw GitHub, etc.).
+> Bundling 7 GB of binary font files into npm would be impractical — use a CDN URL instead.
 
 ---
 
 ## CLI usage
 
+The CLI converts local TTF/OTF font files into WOFF2 format.
+
 ### Usage
 
 ```bash
-npx nerd-font-woff2 --source-dir ./fonts/original [options]
+npx nerd-font-woff2 --source-dir <path> [options]
+# or if installed globally:
+nerd-font-woff2 --source-dir <path> [options]
 ```
 
-### Execution flags
+### Core options
 
-- `--convert` enable conversion mode (default is plan mode)
-- `--confirm` / `--yes` required safety gate for non-dry-run conversion
-- `--dry-run` plan only, no conversion writes
-- `--concurrency <n>` max parallel conversions (default: `1`)
-- `--timeout <ms>` per-file converter timeout (default: `60000` / `60s`)
-- `--index-file <path>` output index file path (default: `<out-dir>/index.json`)
-- `--verbose` more detailed progress output
-- `--debug` debug output (implies `--verbose`)
-- `--json` machine-readable summary output
+| Flag                            | Description                                                  |
+| ------------------------------- | ------------------------------------------------------------ |
+| `--source-dir <path[,path...]>` | Source directory containing `.ttf`/`.otf` files (repeatable) |
+| `--manifest <file>`             | JSON config file (optional alternative to CLI flags)         |
+| `--out-dir <path>`              | Output directory for generated `.woff2` files                |
+| `--temp-dir <path>`             | Temporary working directory                                  |
+| `--include-ext <ttf,otf>`       | Input extensions to process (default: `ttf,otf`)             |
+| `--max-files <n>`               | Limit number of files to process                             |
+
+### Conversion options
+
+| Flag                      | Description                                            |
+| ------------------------- | ------------------------------------------------------ |
+| `--convert`               | Run conversion pipeline (default mode is plan/dry-run) |
+| `--dry-run`               | Plan only — do not call the external converter         |
+| `--confirm`, `--yes`      | Required safety gate for non-dry-run conversion        |
+| `--converter <cmd>`       | Converter executable (default: `woff2_compress`)       |
+| `--converter-arg <value>` | Extra converter arguments (repeatable)                 |
+| `--fail-fast`             | Stop on first conversion failure                       |
+| `--concurrency <n>`       | Number of concurrent conversions (default: `1`)        |
+| `--timeout <ms>`          | Per-file converter timeout in ms (default: `60000`)    |
+
+### Output options
+
+| Flag                  | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| `--index-file <path>` | Write asset index JSON (default: `<out-dir>/index.json`) |
+| `--verbose`           | Print planned files and failures                         |
+| `--debug`             | Enable debug output (implies `--verbose`)                |
+| `--json`              | Emit machine-readable summary to stdout                  |
+| `--help`              | Show help                                                |
 
 ### Examples
 
 ```bash
-# Plan only (safe default)
-npx nerd-font-woff2 --source-dir ./fonts/original
+# Dry run — plan only, no files written (safe default)
+npx nerd-font-woff2 --source-dir ./fonts/original --dry-run
 
 # Convert with explicit safety confirmation
 npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm
 
-# Faster conversion with custom concurrency and timeout
+# Faster — 4 concurrent workers, 2 min timeout per file
 npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm --concurrency 4 --timeout 120000
 
-# JSON summary and explicit index file
+# Machine-readable JSON output + explicit index file path
 npx nerd-font-woff2 --source-dir ./fonts/original --convert --confirm --json --index-file ./fonts/woff2/index.json
+
+# Use a manifest config file instead of flags
+npx nerd-font-woff2 --manifest ./nerd-font-woff2.config.json --convert --confirm --json
+
+# Convert multiple source directories
+npx nerd-font-woff2 --source-dir ./fonts/originals,./fonts/extras --convert --confirm
 ```
 
 ---
@@ -259,14 +273,19 @@ This project's tooling and scripts are licensed under the [MIT License](./LICENS
 ## Contributors ✨
 
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+
 [![All Contributors.](https://img.shields.io/badge/all_contributors-5-orange.svg?style=flat-square)](#contributors-)
+
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
 
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+
 <!-- prettier-ignore-start -->
+
 <!-- markdownlint-disable -->
+
 <table>
   <tbody>
     <tr>
@@ -282,6 +301,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 </table>
 
 <!-- markdownlint-restore -->
+
 <!-- prettier-ignore-end -->
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->
