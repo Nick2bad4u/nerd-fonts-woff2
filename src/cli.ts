@@ -479,7 +479,11 @@ async function convertFonts(
         }
     }
 
-    if (typeof config.indexFile === "string") {
+    if (
+        config.mode === "convert" &&
+        !config.dryRun &&
+        typeof config.indexFile === "string"
+    ) {
         const entries = buildIndexEntries(config, plan, convertedTargets);
         writeIndexFile(config.indexFile, entries);
     }
@@ -497,7 +501,11 @@ async function convertFonts(
         tempDir: config.tempDir,
     };
 
-    if (typeof config.indexFile === "string") {
+    if (
+        config.mode === "convert" &&
+        !config.dryRun &&
+        typeof config.indexFile === "string"
+    ) {
         summary.indexFile = config.indexFile;
     }
 
@@ -934,14 +942,16 @@ function resolveDirectories(
     options: Readonly<ParsedOptions>,
     manifest: Readonly<ManifestFile>
 ): { indexFileRaw: string | undefined; outDir: string; tempDir: string } {
+    const outDir = resolve(
+        getStringOption(options, "out-dir") ?? manifest.outDir ?? "assets/woff2"
+    );
+
     return {
         indexFileRaw:
-            getStringOption(options, "index-file") ?? manifest.indexFile,
-        outDir: resolve(
-            getStringOption(options, "out-dir") ??
-                manifest.outDir ??
-                "assets/woff2"
-        ),
+            getStringOption(options, "index-file") ??
+            manifest.indexFile ??
+            join(outDir, "index.json"),
+        outDir,
         tempDir: resolve(
             getStringOption(options, "temp-dir") ??
                 manifest.tempDir ??
@@ -1037,7 +1047,7 @@ function resolveTimeout(
     reportError: ErrorReporter
 ): { code: number; ok: false } | { ok: true; timeout: number | undefined } {
     if (!isDefined(raw)) {
-        return { ok: true, timeout: undefined };
+        return { ok: true, timeout: 60_000 };
     }
 
     const parsed = Number.parseInt(raw, 10);

@@ -34,8 +34,10 @@ function writeFakeFont(dir: string, name: string): string {
     return fontPath;
 }
 
-/** Writes a fake converter that produces an output file WITHOUT WOFF2 magic
-bytes. */
+/**
+ * Writes a fake converter that produces an output file WITHOUT WOFF2 magic
+ * bytes.
+ */
 function writeInvalidWoff2Converter(root: string): string {
     const script = nodePath.join(root, "invalid-woff2-converter.mjs");
     writeFileSync(
@@ -432,6 +434,64 @@ describe("cli main", () => {
         }
     });
 
+    it("--debug shows default timeout of 60000 ms", async () => {
+        expect.assertions(2);
+
+        const stdoutLines: string[] = [];
+        vi.spyOn(process.stdout, "write").mockImplementation((data) => {
+            stdoutLines.push(String(data));
+            return true;
+        });
+        vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+        const root = createFixtureRoot();
+        const sourceDir = nodePath.join(root, "fonts", "DefaultTimeout");
+        mkdirSync(sourceDir, { recursive: true });
+        writeFakeFont(sourceDir, "DefaultTimeout-Regular.ttf");
+
+        try {
+            const code = await main([
+                "--source-dir",
+                nodePath.join(root, "fonts"),
+                "--debug",
+            ]);
+
+            expect(code).toBe(0);
+            expect(stdoutLines.join("")).toContain("60000 ms");
+        } finally {
+            rmSync(root, { force: true, recursive: true });
+        }
+    });
+
+    it("plan mode does not write default index file", async () => {
+        expect.assertions(2);
+
+        vi.spyOn(process.stdout, "write").mockReturnValue(true);
+        vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+        const root = createFixtureRoot();
+        const sourceDir = nodePath.join(root, "fonts", "PlanIndex");
+        const outDir = nodePath.join(root, "out");
+        mkdirSync(sourceDir, { recursive: true });
+        writeFakeFont(sourceDir, "PlanIndex-Regular.ttf");
+
+        const expectedIndex = nodePath.join(outDir, "index.json");
+
+        try {
+            const code = await main([
+                "--source-dir",
+                nodePath.join(root, "fonts"),
+                "--out-dir",
+                outDir,
+            ]);
+
+            expect(code).toBe(0);
+            expect(existsSync(expectedIndex)).toBeFalsy();
+        } finally {
+            rmSync(root, { force: true, recursive: true });
+        }
+    });
+
     it("--max-files limits number of planned files", async () => {
         expect.assertions(2);
 
@@ -523,6 +583,48 @@ describe("cli main", () => {
 
             expect(firstEntry).toBeDefined();
             expect(existsSync(firstEntry.outputPath)).toBeTruthy();
+        } finally {
+            rmSync(root, { force: true, recursive: true });
+        }
+    });
+
+    it("convert mode writes default index file at out-dir root", async () => {
+        expect.assertions(3);
+
+        vi.spyOn(process.stdout, "write").mockReturnValue(true);
+        vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+        const root = createFixtureRoot();
+        const sourceDir = nodePath.join(root, "fonts", "DefaultIndex");
+        const outDir = nodePath.join(root, "out");
+        const tempDir = nodePath.join(root, "temp");
+        mkdirSync(sourceDir, { recursive: true });
+        writeFakeFont(sourceDir, "DefaultIndex-Regular.ttf");
+
+        const fakeConverter = writeValidWoff2Converter(root);
+        const expectedIndex = nodePath.join(outDir, "index.json");
+
+        try {
+            const code = await main([
+                "--source-dir",
+                nodePath.join(root, "fonts"),
+                "--convert",
+                "--confirm",
+                "--converter",
+                process.execPath,
+                "--converter-arg",
+                fakeConverter,
+                "--out-dir",
+                outDir,
+                "--temp-dir",
+                tempDir,
+            ]);
+
+            expect(code).toBe(0);
+            expect(existsSync(expectedIndex)).toBeTruthy();
+            expect(readFileSync(expectedIndex, "utf8")).toContain(
+                "DefaultIndex-Regular.woff2"
+            );
         } finally {
             rmSync(root, { force: true, recursive: true });
         }
