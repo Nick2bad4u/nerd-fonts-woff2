@@ -47,7 +47,7 @@
     "main": "./dist/cli.js",
     "types": "./dist/cli.d.ts",
     "bin": {
-        "nerd-font-woff2": "./nerd-font-woff2"
+        "nerd-font-woff2": "nerd-font-woff2"
     },
     "files": [
         "nerd-font-woff2",
