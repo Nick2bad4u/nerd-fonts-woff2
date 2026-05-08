@@ -7,11 +7,15 @@
     "keywords": [
         "fonts",
         "woff2",
+        "nerdfonts",
+        "nerd-font",
         "nerd-fonts",
         "cli",
+        "webfont",
+        "ttf",
         "conversion"
     ],
-    "homepage": "https://github.com/Nick2bad4u/nerd-fonts-woff2",
+    "homepage": "https://nick2bad4u.github.io/nerd-fonts-woff2",
     "bugs": {
         "url": "https://github.com/Nick2bad4u/nerd-fonts-woff2/issues"
     },
@@ -94,8 +98,8 @@
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
-        "@types/node": "^25.6.0",
-        "@vitest/coverage-v8": "^4.0.7",
+        "@types/node": "^25.6.2",
+        "@vitest/coverage-v8": "^4.1.5",
         "eslint": "^10.3.0",
         "eslint-config-nick2bad4u": "^1.0.11",
         "globals": "^17.6.0",
@@ -109,8 +113,8 @@
         "stylelint": "^17.11.0",
         "stylelint-config-nick2bad4u": "^1.0.9",
         "typescript": "^6.0.3",
-        "typescript-eslint": "^8.59.1",
-        "vitest": "^4.0.7"
+        "typescript-eslint": "^8.59.2",
+        "vitest": "^4.1.5"
     },
     "packageManager": "npm@11.14.0",
     "engines": {

@@ -10,13 +10,79 @@ const statusNode = /** @type {HTMLParagraphElement} */ (
 const resultsNode = /** @type {HTMLElement} */ (
     document.getElementById("results")
 );
+const familyLinksNode = /** @type {HTMLElement} */ (
+    document.getElementById("family_links")
+);
+const statFamiliesNode = /** @type {HTMLElement} */ (
+    document.getElementById("stat_families")
+);
+const statFilesNode = /** @type {HTMLElement} */ (
+    document.getElementById("stat_files")
+);
+const statVersionNode = /** @type {HTMLElement} */ (
+    document.getElementById("stat_version")
+);
 
-/** @type {{
-    family: string;
-    fileName: string;
-    outputPath: string;
-    converted: boolean;
-}[]} */
+/**
+ * @param {string} value
+ *
+ * @returns {string}
+ */
+function slugify(value) {
+    return value
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/gu, "-")
+        .replaceAll(/^-+|-+$/gu, "")
+        .slice(0, 120);
+}
+
+/**
+ * @param {string} version
+ * @param {number} familyCount
+ * @param {number} fileCount
+ *
+ * @returns {void}
+ */
+function renderStats(version, familyCount, fileCount) {
+    statFamiliesNode.textContent = `Families: ${familyCount.toLocaleString()}`;
+    statFilesNode.textContent = `Files: ${fileCount.toLocaleString()}`;
+    statVersionNode.textContent = `Version: ${version}`;
+}
+
+/**
+ * @param {readonly [
+ *     string,
+ *     {
+ *         family: string;
+ *         fileName: string;
+ *         outputPath: string;
+ *         converted: boolean;
+ *     }[],
+ * ][]} groups
+ *
+ * @returns {void}
+ */
+function renderFamilyLinks(groups) {
+    familyLinksNode.replaceChildren();
+
+    for (const [family, familyEntries] of groups) {
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = `#family-${slugify(family)}`;
+        link.textContent = `${family} (${familyEntries.length})`;
+        item.append(link);
+        familyLinksNode.append(item);
+    }
+}
+
+/**
+ * @type {{
+ *     family: string;
+ *     fileName: string;
+ *     outputPath: string;
+ *     converted: boolean;
+ * }[]}
+ */
 let entries = [];
 
 /**
@@ -65,17 +131,26 @@ function render() {
     resultsNode.replaceChildren();
 
     if (filtered.length === 0) {
+        renderStats(version, 0, 0);
+        familyLinksNode.replaceChildren();
         statusNode.textContent = "No matching fonts found.";
         return;
     }
 
     statusNode.textContent = `Showing ${filtered.length.toLocaleString()} files across ${grouped.size.toLocaleString()} families.`;
 
-    for (const [family, familyEntries] of [...grouped.entries()].sort((a, b) =>
+    const sortedGroups = [...grouped.entries()].sort((a, b) =>
         a[0].localeCompare(b[0])
-    )) {
+    );
+
+    renderStats(version, sortedGroups.length, filtered.length);
+    renderFamilyLinks(sortedGroups);
+
+    for (const [family, familyEntries] of sortedGroups) {
         const details = document.createElement("details");
         details.className = "family";
+        details.id = `family-${slugify(family)}`;
+        details.open = query.length > 0;
 
         const summary = document.createElement("summary");
         summary.textContent = `${family} (${familyEntries.length})`;
@@ -169,4 +244,4 @@ versionInput.addEventListener("input", () => {
     render();
 });
 
-void loadIndex();
+loadIndex();

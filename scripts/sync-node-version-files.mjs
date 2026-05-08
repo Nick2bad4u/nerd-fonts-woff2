@@ -82,23 +82,21 @@ const parseArguments = (argumentList) => {
     /** @type {string | null} */
     let explicitVersion = null;
 
-    for (let index = 0; index < argumentList.length; index += 1) {
-        const argument = argumentList[index];
-
-        if (typeof argument !== "string") {
-            throw new TypeError(
-                `Expected a string command-line argument at index ${index}.`
-            );
-        }
-
+    /**
+     * @param {string} argument
+     * @param {number} index
+     *
+     * @returns {{ consumedNext: boolean }}
+     */
+    const handleArgument = (argument, index) => {
         if (argument === "--check") {
             checkOnly = true;
-            continue;
+            return { consumedNext: false };
         }
 
         if (argument === "--check-current") {
             checkCurrent = true;
-            continue;
+            return { consumedNext: false };
         }
 
         if (argument === "--version") {
@@ -109,18 +107,32 @@ const parseArguments = (argumentList) => {
             }
 
             explicitVersion = normalizeNodeVersion(nextArgument);
-            index += 1;
-            continue;
+            return { consumedNext: true };
         }
 
         if (argument.startsWith("--version=")) {
             explicitVersion = normalizeNodeVersion(
                 argument.slice("--version=".length)
             );
-            continue;
+            return { consumedNext: false };
         }
 
         throw new TypeError(`Unknown argument: ${argument}`);
+    };
+
+    for (let index = 0; index < argumentList.length; index += 1) {
+        const argument = argumentList[index];
+
+        if (typeof argument !== "string") {
+            throw new TypeError(
+                `Expected a string command-line argument at index ${index}.`
+            );
+        }
+
+        const { consumedNext } = handleArgument(argument, index);
+        if (consumedNext) {
+            index += 1;
+        }
     }
 
     if (checkOnly && checkCurrent) {

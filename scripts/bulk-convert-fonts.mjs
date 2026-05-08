@@ -39,22 +39,25 @@ const force = process.argv.includes("--force");
 const concurrencyFlag = process.argv.find((arg) =>
     arg.startsWith("--concurrency=")
 );
+const concurrencyRaw =
+    typeof concurrencyFlag === "string"
+        ? (concurrencyFlag.split("=")[1] ?? "")
+        : "";
 
 /**
  * Maximum parallel conversions. Cap at 8 (32 for user-provided) to avoid
  * excessive memory use.
  */
 const CONCURRENCY = concurrencyFlag
-    ? Math.min(
-          Math.max(Number.parseInt(concurrencyFlag.split("=")[1], 10) || 1, 1),
-          32
-      )
+    ? Math.min(Math.max(Number.parseInt(concurrencyRaw, 10) || 1, 1), 32)
     : Math.min(cpus().length, 8);
 
 /** Kill a worker if a single font takes longer than this. */
 const timeoutFlag = process.argv.find((arg) => arg.startsWith("--timeout="));
+const timeoutRaw =
+    typeof timeoutFlag === "string" ? (timeoutFlag.split("=")[1] ?? "") : "";
 const FONT_TIMEOUT_MS = timeoutFlag
-    ? Math.max(Number.parseInt(timeoutFlag.split("=")[1], 10) || 1, 1) * 1000
+    ? Math.max(Number.parseInt(timeoutRaw, 10) || 1, 1) * 1000
     : 60_000;
 
 /**
@@ -180,7 +183,11 @@ function convertInWorker(sourcePath, outputPath) {
         timer = setTimeout(() => {
             worker.terminate().catch(() => undefined);
             settle({
-                error: `timed out after ${FONT_TIMEOUT_MS / 1000}s`,
+                error: [
+                    `timed out after ${FONT_TIMEOUT_MS / 1000}s`,
+                    `source: ${sourcePath}`,
+                    "Try raising --timeout=<seconds> (e.g. --timeout=240) and/or reducing --concurrency.",
+                ].join(". "),
                 ok: false,
             });
         }, FONT_TIMEOUT_MS);
