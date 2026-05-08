@@ -38,6 +38,17 @@ const config = [
             "package-json/require-peerDependencies": "off",
         },
     },
+    // @ts-expect-error - The type definitions for ESLint configs are very loose
+    {
+        // The shared config enables @stylistic/spaced-comment globally, but the
+        // rule does not safely handle HTML comment/token shapes and can crash
+        // with "Cannot read properties of undefined (reading 'markers')" when
+        // linting index.html.
+        files: ["**/*.html"],
+        rules: {
+            "@stylistic/spaced-comment": "off",
+        },
+    },
 ];
 
 export default config;

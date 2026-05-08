@@ -114,11 +114,9 @@ function readLocalMetadata() {
 }
 
 /**
+ * Main entry point.
  *
- */
-
-/**
- *
+ * @returns {void}
  */
 function main() {
     const localMeta = readLocalMetadata();
