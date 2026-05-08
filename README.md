@@ -63,7 +63,7 @@ https://cdn.jsdelivr.net/gh/Nick2bad4u/nerd-fonts-woff2@<version>/fonts/woff2/<F
 | `<Family>`   | `JetBrainsMono`                 |
 | `<FileName>` | `JetBrainsMonoNerdFont-Regular` |
 
-Find available files by browsing the [`fonts/woff2/`](./fonts/woff2/) folder in this repository, or see the full [asset index](./fonts/woff2/index.json).
+Find available files by browsing the [`fonts/woff2/`](./fonts/woff2) folder in this repository, or see the full [asset index](./fonts/woff2/index.json).
 
 ---
 
@@ -106,7 +106,7 @@ const fontBuffer = readFileSync(
 ## Available font families
 
 All families from [Nerd Fonts v3.4.0](https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.4.0) are included.
-Browse the full list in the [`fonts/woff2/`](./fonts/woff2/) directory.
+Browse the full list in the [`fonts/woff2/`](./fonts/woff2) directory.
 
 Popular families:
 
@@ -214,7 +214,7 @@ This project's tooling and scripts are licensed under the [MIT License](./LICENS
 - [Nerd Fonts upstream](https://github.com/ryanoasis/nerd-fonts)
 - [Contributing](./CONTRIBUTING.md)
 - [Security](./SECURITY.md)
-- [Developer guide](./DEVELOPER.md)
+- [Developer guide](./CONTRIBUTING.md#in-depth-developer-documentation)
 
 ## Contributors ✨
 

@@ -41,7 +41,7 @@ const force = process.argv.includes("--force");
 const CONCURRENCY = Math.min(cpus().length, 4);
 
 /** Kill a worker if a single font takes longer than this. */
-const FONT_TIMEOUT_MS = 30_000;
+const FONT_TIMEOUT_MS = 60_000;
 
 /**
  * @typedef {{
