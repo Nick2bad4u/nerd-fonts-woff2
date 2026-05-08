@@ -113,7 +113,13 @@ function readLocalMetadata() {
     return parsed;
 }
 
-/**/
+/**
+ *
+ */
+
+/**
+ *
+ */
 function main() {
     const localMeta = readLocalMetadata();
     const tags = fetchUpstreamTags();
