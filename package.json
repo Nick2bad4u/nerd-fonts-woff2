@@ -52,7 +52,6 @@
     "files": [
         "nerd-font-woff2",
         "dist",
-        "fonts",
         "README.md",
         "LICENSE"
     ],
