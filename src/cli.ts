@@ -37,15 +37,7 @@ import type {
 
 import { printHelp } from "./cli-help.js";
 
-const {
-    basename,
-    dirname,
-    extname,
-    join,
-    normalize,
-    relative,
-    resolve,
-} = path;
+const { basename, dirname, extname, join, normalize, relative, resolve } = path;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
@@ -641,7 +633,10 @@ function isRecord(value: unknown): value is UnknownRecord {
 }
 
 function isStringArray(value: unknown): value is readonly string[] {
-    return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+    return (
+        Array.isArray(value) &&
+        value.every((entry) => typeof entry === "string")
+    );
 }
 
 /**
@@ -656,10 +651,7 @@ async function isValidWoff2File(filePath: string): Promise<boolean> {
         fileHandle = await open(filePath, "r");
         const buffer = Buffer.alloc(4);
         const { bytesRead } = await fileHandle.read(buffer, 0, 4, 0);
-        return (
-            bytesRead === 4 &&
-            buffer.toString("latin1", 0, 4) === magic
-        );
+        return bytesRead === 4 && buffer.toString("latin1", 0, 4) === magic;
     } catch {
         return false;
     } finally {
@@ -683,7 +675,9 @@ async function listFontFiles(
         }
 
         // eslint-disable-next-line no-await-in-loop -- breadth-first traversal must resolve each directory before scheduling children
-        const directoryEntries = await readdir(current, { withFileTypes: true });
+        const directoryEntries = await readdir(current, {
+            withFileTypes: true,
+        });
         const entries = directoryEntries.toSorted((a, b) =>
             a.name.localeCompare(b.name)
         );
@@ -1141,7 +1135,9 @@ async function runConverter(
     );
 }
 
-function toNonEmptyArray(value: readonly string[] | undefined): readonly string[] {
+function toNonEmptyArray(
+    value: readonly string[] | undefined
+): readonly string[] {
     if (!isDefined(value)) {
         return [];
     }
