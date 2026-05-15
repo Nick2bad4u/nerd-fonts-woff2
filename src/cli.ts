@@ -1,27 +1,19 @@
+import type { FileHandle } from "node:fs/promises";
 import type { UnknownRecord } from "type-fest";
 
 import { execFile } from "node:child_process";
 import {
-    closeSync,
-    copyFileSync,
-    existsSync,
-    mkdirSync,
-    openSync,
-    readdirSync,
-    readFileSync,
-    readSync,
-    statSync,
-    writeFileSync,
-} from "node:fs";
-import {
-    basename,
-    dirname,
-    extname,
-    join,
-    normalize,
-    relative,
-    resolve,
-} from "node:path";
+    access,
+    copyFile,
+    constants as fsConstants,
+    mkdir,
+    open,
+    readdir,
+    readFile,
+    stat,
+    writeFile,
+} from "node:fs/promises";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     arrayAt,
@@ -30,7 +22,6 @@ import {
     isDefined,
     isEmpty,
     isFinite,
-    safeCastTo,
     setHas,
     stringSplit,
 } from "ts-extras";
@@ -45,6 +36,16 @@ import type {
 } from "./cli-types.js";
 
 import { printHelp } from "./cli-help.js";
+
+const {
+    basename,
+    dirname,
+    extname,
+    join,
+    normalize,
+    relative,
+    resolve,
+} = path;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ type BuildConfigResult =
 
 type ErrorReporter = (message: string, category: ErrorCategory) => void;
 
-type ExecutionConfig = {
+interface ExecutionConfig {
     concurrency: number;
     confirm: boolean;
     converter: string;
@@ -96,11 +97,11 @@ type ExecutionConfig = {
     tempDir: string;
     timeout?: number;
     verbose: boolean;
-};
+}
 
 // ─── Output helpers ───────────────────────────────────────────────────────────
 
-type ManifestFile = {
+interface ManifestFile {
     converter?: string;
     converterArgs?: readonly string[];
     includeExts?: readonly string[];
@@ -109,7 +110,7 @@ type ManifestFile = {
     outDir?: string;
     sourceDirs?: readonly string[];
     tempDir?: string;
-};
+}
 
 type SingleFontResult = "converted" | "failed-break" | "failed-continue";
 
@@ -131,14 +132,14 @@ type SingleFontResult = "converted" | "failed-break" | "failed-continue";
  */
 export async function main(argv: readonly string[]): Promise<number> {
     const options = parseArguments(argv);
-    const result = buildExecutionConfig(options);
+    const result = await buildExecutionConfig(options);
 
     if (!result.ok) {
         return result.code;
     }
 
     const { config } = result;
-    const plan = buildPlan(config);
+    const plan = await buildPlan(config);
 
     if (config.debug) {
         writeOut(c.dim(`[debug] converter: ${config.converter}`));
@@ -190,9 +191,7 @@ function appendToListOption(
     value: string
 ): void {
     const existing = parsed[key];
-    const bucket: string[] = Array.isArray(existing)
-        ? [...safeCastTo<readonly string[]>(existing)]
-        : [];
+    const bucket: string[] = isStringArray(existing) ? [...existing] : [];
     bucket.push(value);
     parsed[key] = bucket;
 }
@@ -209,11 +208,9 @@ function buildConverterMessage(stdout: string, stderr: string): string {
     return "converter exited with non-zero status";
 }
 
-// ─── Utility helpers ──────────────────────────────────────────────────────────
-
-function buildExecutionConfig(
+async function buildExecutionConfig(
     options: Readonly<ParsedOptions>
-): BuildConfigResult {
+): Promise<BuildConfigResult> {
     const jsonOutput = options["json"] === true;
 
     if (options["help"] === true) {
@@ -224,7 +221,7 @@ function buildExecutionConfig(
     const reportError: ErrorReporter = jsonOutput
         ? emitJsonError
         : emitTextError;
-    const manifestResult = loadManifest(
+    const manifestResult = await loadManifest(
         getStringOption(options, "manifest"),
         reportError
     );
@@ -235,7 +232,10 @@ function buildExecutionConfig(
     const { manifest } = manifestResult;
 
     const sourceDirs = resolveSources(options, manifest);
-    const sourcesResult = validateSourceDirectories(sourceDirs, reportError);
+    const sourcesResult = await validateSourceDirectories(
+        sourceDirs,
+        reportError
+    );
     if (!sourcesResult.ok) {
         return sourcesResult;
     }
@@ -318,68 +318,66 @@ function buildExecutionConfig(
     return { config, ok: true };
 }
 
-function buildIndexEntries(
+async function buildIndexEntries(
     config: Readonly<ExecutionConfig>,
     plan: readonly Readonly<PlannedFontFile>[],
     convertedTargets: ReadonlySet<string>
-): FontIndexEntry[] {
-    const entries: FontIndexEntry[] = [];
+): Promise<FontIndexEntry[]> {
+    return Promise.all(
+        plan.map(async (planned) => {
+            const outputPath = resolve(
+                join(config.outDir, planned.relativeOutputPath)
+            );
+            const converted = setHas(convertedTargets, outputPath);
+            const pathSegments = stringSplit(
+                planned.relativeOutputPath.replaceAll("\\", "/"),
+                "/"
+            );
+            const firstSegment = arrayFirst(pathSegments) ?? "unknown";
+            const sizeBytes = await readFileSizeOrNull(outputPath);
 
-    for (const planned of plan) {
-        const outputPath = resolve(
-            join(config.outDir, planned.relativeOutputPath)
-        );
-        const converted = setHas(convertedTargets, outputPath);
-        const pathSegments = stringSplit(
-            planned.relativeOutputPath.replaceAll("\\", "/"),
-            "/"
-        );
-        const firstSegment = arrayFirst(pathSegments) ?? "unknown";
-
-        let sizeBytes: null | number = null;
-        if (existsSync(outputPath)) {
-            sizeBytes = statSync(outputPath).size;
-        }
-
-        entries.push({
-            converted,
-            family: firstSegment,
-            fileName: arrayAt(pathSegments, -1) ?? "",
-            outputPath,
-            sizeBytes,
-            sourcePath: planned.sourcePath,
-        });
-    }
-
-    return entries;
+            return {
+                converted,
+                family: firstSegment,
+                fileName: arrayAt(pathSegments, -1) ?? "",
+                outputPath,
+                sizeBytes,
+                sourcePath: planned.sourcePath,
+            };
+        })
+    );
 }
 
-function buildPlan(config: Readonly<ExecutionConfig>): PlannedFontFile[] {
-    const plans: PlannedFontFile[] = [];
+async function buildPlan(
+    config: Readonly<ExecutionConfig>
+): Promise<PlannedFontFile[]> {
+    const perSourcePlans = await Promise.all(
+        config.sourceDirs.map(async (sourceDir) => {
+            const files = await listFontFiles(sourceDir, config.includeExts);
+            const sourceRoot = basename(sourceDir);
 
-    for (const sourceDir of config.sourceDirs) {
-        const files = listFontFiles(sourceDir, config.includeExts);
-        const sourceRoot = basename(sourceDir);
+            return files.map<PlannedFontFile>((sourcePath) => {
+                const relativeInputPath = normalize(
+                    relative(sourceDir, sourcePath)
+                );
+                const relativeOutputPath = normalize(
+                    join(
+                        sourceRoot,
+                        relativeInputPath.replace(/\.(?:otf|ttf)$/iv, ".woff2")
+                    )
+                );
 
-        for (const sourcePath of files) {
-            const relativeInputPath = normalize(
-                relative(sourceDir, sourcePath)
-            );
-            const relativeOutputPath = normalize(
-                join(
+                return {
+                    relativeInputPath,
+                    relativeOutputPath,
+                    sourcePath,
                     sourceRoot,
-                    relativeInputPath.replace(/\.(?:otf|ttf)$/iu, ".woff2")
-                )
-            );
-
-            plans.push({
-                relativeInputPath,
-                relativeOutputPath,
-                sourcePath,
-                sourceRoot,
+                };
             });
-        }
-    }
+        })
+    );
+
+    const plans = perSourcePlans.flat();
 
     return plans
         .toSorted((left, right) =>
@@ -388,14 +386,16 @@ function buildPlan(config: Readonly<ExecutionConfig>): PlannedFontFile[] {
         .slice(0, config.maxFiles ?? plans.length);
 }
 
+// ─── Utility helpers ──────────────────────────────────────────────────────────
+
 function collectListOption(
     options: Readonly<ParsedOptions>,
     key: string
 ): readonly string[] {
     const value = options[key];
 
-    if (Array.isArray(value)) {
-        return safeCastTo<readonly string[]>(value)
+    if (isStringArray(value)) {
+        return value
             .flatMap((part) => stringSplit(part, ","))
             .map((part) => part.trim())
             .filter((part) => part.length > 0);
@@ -421,8 +421,8 @@ async function convertFonts(
     let shouldStop = false;
 
     if (config.mode === "convert" && !config.dryRun) {
-        mkdirSync(config.tempDir, { recursive: true });
-        mkdirSync(config.outDir, { recursive: true });
+        await mkdir(config.tempDir, { recursive: true });
+        await mkdir(config.outDir, { recursive: true });
 
         const queue = [...plan];
         const limit = Math.max(
@@ -466,10 +466,12 @@ async function convertFonts(
                 } else if (result === "failed-break") {
                     // eslint-disable-next-line require-atomic-updates -- Node.js is single-threaded; no true race between check and assignment
                     shouldStop = true;
-                } else if (result === "failed-continue" && config.verbose) {
+                } else if (config.verbose) {
                     writeOut(
                         `  ${c.red("\u2716")} ${c.cyan(basename(planned.sourcePath))}`
                     );
+                } else {
+                    // Intentionally silent when verbose logging is disabled.
                 }
             }
         };
@@ -484,8 +486,8 @@ async function convertFonts(
         !config.dryRun &&
         typeof config.indexFile === "string"
     ) {
-        const entries = buildIndexEntries(config, plan, convertedTargets);
-        writeIndexFile(config.indexFile, entries);
+        const entries = await buildIndexEntries(config, plan, convertedTargets);
+        await writeIndexFile(config.indexFile, entries);
     }
 
     const summary: RunSummary = {
@@ -528,8 +530,8 @@ async function convertSingleFont(
             planned.relativeInputPath
         )
     );
-    mkdirSync(dirname(stagedInput), { recursive: true });
-    copyFileSync(planned.sourcePath, stagedInput);
+    await mkdir(dirname(stagedInput), { recursive: true });
+    await copyFile(planned.sourcePath, stagedInput);
 
     const commandResult = await runConverter(
         config.converter,
@@ -547,28 +549,26 @@ async function convertSingleFont(
         return config.failFast ? "failed-break" : "failed-continue";
     }
 
-    const stagedOutput = stagedInput.replace(/\.(?:otf|ttf)$/iu, ".woff2");
-    if (!existsSync(stagedOutput)) {
+    const stagedOutput = stagedInput.replace(/\.(?:otf|ttf)$/iv, ".woff2");
+    if (!(await pathExists(stagedOutput))) {
         failures.push(
             `${planned.sourcePath}: converter did not produce expected .woff2 output`
         );
         return config.failFast ? "failed-break" : "failed-continue";
     }
 
-    if (!isValidWoff2File(stagedOutput)) {
+    if (!(await isValidWoff2File(stagedOutput))) {
         failures.push(
             `${planned.sourcePath}: converter output failed WOFF2 magic bytes validation`
         );
         return config.failFast ? "failed-break" : "failed-continue";
     }
 
-    mkdirSync(dirname(outputPath), { recursive: true });
-    copyFileSync(stagedOutput, outputPath);
+    await mkdir(dirname(outputPath), { recursive: true });
+    await copyFile(stagedOutput, outputPath);
     convertedTargets.add(outputPath);
     return "converted";
 }
-
-// ─── WOFF2 validation ─────────────────────────────────────────────────────────
 
 function emitJsonError(message: string, category: ErrorCategory): void {
     writeErr(
@@ -584,8 +584,6 @@ function emitJsonError(message: string, category: ErrorCategory): void {
         )
     );
 }
-
-// ─── Converter runner ─────────────────────────────────────────────────────────
 
 function emitTextError(message: string): void {
     writeErr(`Error: ${message}`);
@@ -619,53 +617,62 @@ function isBooleanFlag(key: string): boolean {
     );
 }
 
+async function isDirectory(filePath: string): Promise<boolean> {
+    try {
+        const details = await stat(filePath);
+        return details.isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+// ─── WOFF2 validation ─────────────────────────────────────────────────────────
+
 function isListFlag(key: string): boolean {
     return (
         key === "source-dir" || key === "converter-arg" || key === "include-ext"
     );
 }
 
-// ─── Manifest parsing ─────────────────────────────────────────────────────────
+// ─── Converter runner ─────────────────────────────────────────────────────────
+
+function isRecord(value: unknown): value is UnknownRecord {
+    return typeof value === "object" && value !== null;
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+    return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
 
 /**
  * Validates that a file begins with the WOFF2 magic bytes (0x774F4632 =
  * "wOF2"). Returns `false` if the file cannot be read or is too short.
  */
-function isValidWoff2File(filePath: string): boolean {
-    // WOFF2 magic: "wOF2" = 0x77 0x4F 0x46 0x32
-    const magic = [
-        0x77,
-        0x4f,
-        0x46,
-        0x32,
-    ] as const;
+async function isValidWoff2File(filePath: string): Promise<boolean> {
+    const magic = "wOF2";
+    let fileHandle: FileHandle | null = null;
+
     try {
-        const fd = openSync(filePath, "r");
+        fileHandle = await open(filePath, "r");
         const buffer = Buffer.alloc(4);
-        let bytesRead = 0;
-        try {
-            bytesRead = readSync(fd, buffer, 0, 4, 0);
-        } finally {
-            closeSync(fd);
-        }
+        const { bytesRead } = await fileHandle.read(buffer, 0, 4, 0);
         return (
             bytesRead === 4 &&
-            buffer[0] === arrayFirst(magic) &&
-            buffer[1] === magic[1] &&
-            buffer[2] === magic[2] &&
-            buffer[3] === magic[3]
+            buffer.toString("latin1", 0, 4) === magic
         );
     } catch {
         return false;
+    } finally {
+        if (fileHandle !== null) {
+            await fileHandle.close();
+        }
     }
 }
 
-// ─── Font discovery ───────────────────────────────────────────────────────────
-
-function listFontFiles(
+async function listFontFiles(
     sourceDir: string,
     includeExts: ReadonlySet<string>
-): string[] {
+): Promise<string[]> {
     const discovered: string[] = [];
     const queue: string[] = [sourceDir];
 
@@ -675,8 +682,10 @@ function listFontFiles(
             continue;
         }
 
-        const entries = readdirSync(current, { withFileTypes: true }).toSorted(
-            (a, b) => a.name.localeCompare(b.name)
+        // eslint-disable-next-line no-await-in-loop -- breadth-first traversal must resolve each directory before scheduling children
+        const directoryEntries = await readdir(current, { withFileTypes: true });
+        const entries = directoryEntries.toSorted((a, b) =>
+            a.name.localeCompare(b.name)
         );
 
         for (const entry of entries) {
@@ -692,7 +701,7 @@ function listFontFiles(
             }
 
             const extension = extname(entry.name)
-                .replace(/^\./u, "")
+                .replace(/^\./v, "")
                 .toLowerCase();
 
             if (setHas(includeExts, extension)) {
@@ -704,18 +713,21 @@ function listFontFiles(
     return discovered;
 }
 
-// ─── Index building ───────────────────────────────────────────────────────────
+// ─── Manifest parsing ─────────────────────────────────────────────────────────
 
-function loadManifest(
+async function loadManifest(
     manifestPath: string | undefined,
     reportError: ErrorReporter
-): { code: number; ok: false } | { manifest: ManifestFile; ok: true } {
+): Promise<{ code: number; ok: false } | { manifest: ManifestFile; ok: true }> {
     if (!isDefined(manifestPath)) {
         return { manifest: {}, ok: true };
     }
 
     try {
-        return { manifest: parseManifest(resolve(manifestPath)), ok: true };
+        return {
+            manifest: await parseManifest(resolve(manifestPath)),
+            ok: true,
+        };
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         reportError(
@@ -726,6 +738,8 @@ function loadManifest(
     }
 }
 
+// ─── Font discovery ───────────────────────────────────────────────────────────
+
 function normalizeExtList(entries: readonly string[]): ReadonlySet<string> {
     const normalized = entries
         .map((entry) => entry.trim().toLowerCase())
@@ -735,7 +749,7 @@ function normalizeExtList(entries: readonly string[]): ReadonlySet<string> {
     return new Set(normalized);
 }
 
-// ─── Build plan ───────────────────────────────────────────────────────────────
+// ─── Index building ───────────────────────────────────────────────────────────
 
 function parseArguments(args: readonly string[]): ParsedOptions {
     const parsed: ParsedOptions = {};
@@ -780,17 +794,15 @@ function parseArguments(args: readonly string[]): ParsedOptions {
     return parsed;
 }
 
-// ─── Conversion ───────────────────────────────────────────────────────────────
-
-function parseManifest(pathToManifest: string): ManifestFile {
-    const raw = readFileSync(pathToManifest, "utf8");
+async function parseManifest(pathToManifest: string): Promise<ManifestFile> {
+    const raw = await readFile(pathToManifest, "utf8");
     const parsed = JSON.parse(raw) as unknown;
 
-    if (typeof parsed !== "object" || parsed === null) {
+    if (!isRecord(parsed)) {
         throw new Error("manifest root must be a JSON object");
     }
 
-    const manifest = parsed as UnknownRecord;
+    const manifest = parsed;
 
     const getString = (key: string): string | undefined =>
         typeof manifest[key] === "string" ? manifest[key] : undefined;
@@ -851,6 +863,19 @@ function parseManifest(pathToManifest: string): ManifestFile {
     return manifestFile;
 }
 
+// ─── Build plan ───────────────────────────────────────────────────────────────
+
+async function pathExists(filePath: string): Promise<boolean> {
+    try {
+        await access(filePath, fsConstants.F_OK);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// ─── Conversion ───────────────────────────────────────────────────────────────
+
 function printTextSummary(
     summary: Readonly<RunSummary>,
     verbose: boolean
@@ -887,6 +912,15 @@ function printTextSummary(
         for (const failure of summary.failures) {
             writeOut(`  ${c.red("\u2716")} ${failure}`);
         }
+    }
+}
+
+async function readFileSizeOrNull(filePath: string): Promise<null | number> {
+    try {
+        const details = await stat(filePath);
+        return details.size;
+    } catch {
+        return null;
     }
 }
 
@@ -1107,10 +1141,8 @@ async function runConverter(
     );
 }
 
-function toNonEmptyArray(
-    value: readonly string[] | undefined
-): readonly string[] {
-    if (!Array.isArray(value)) {
+function toNonEmptyArray(value: readonly string[] | undefined): readonly string[] {
+    if (!isDefined(value)) {
         return [];
     }
 
@@ -1119,10 +1151,10 @@ function toNonEmptyArray(
         .filter((entry) => entry.length > 0);
 }
 
-function validateSourceDirectories(
+async function validateSourceDirectories(
     sourceDirs: readonly string[],
     reportError: ErrorReporter
-): { code: number; ok: false } | { ok: true } {
+): Promise<{ code: number; ok: false } | { ok: true }> {
     if (isEmpty(sourceDirs)) {
         reportError(
             "at least one --source-dir is required (or sourceDirs in --manifest).",
@@ -1131,14 +1163,20 @@ function validateSourceDirectories(
         return { code: 1, ok: false };
     }
 
-    for (const sourceDir of sourceDirs) {
-        if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
-            reportError(
-                `source directory does not exist: ${sourceDir}`,
-                "validation_error"
-            );
-            return { code: 1, ok: false };
-        }
+    const checks = await Promise.all(
+        sourceDirs.map(async (sourceDir) => ({
+            isDir: await isDirectory(sourceDir),
+            sourceDir,
+        }))
+    );
+    const missing = checks.find((check) => !check.isDir);
+
+    if (isDefined(missing)) {
+        reportError(
+            `source directory does not exist: ${missing.sourceDir}`,
+            "validation_error"
+        );
+        return { code: 1, ok: false };
     }
 
     return { ok: true };
@@ -1150,12 +1188,12 @@ function writeErr(message: string): void {
 
 // ─── Output formatting ────────────────────────────────────────────────────────
 
-function writeIndexFile(
+async function writeIndexFile(
     indexFile: string,
     entries: readonly Readonly<FontIndexEntry>[]
-): void {
-    mkdirSync(dirname(indexFile), { recursive: true });
-    writeFileSync(indexFile, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
+): Promise<void> {
+    await mkdir(dirname(indexFile), { recursive: true });
+    await writeFile(indexFile, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
 }
 
 // ─── Entry points ─────────────────────────────────────────────────────────────
@@ -1166,6 +1204,7 @@ function writeOut(message: string): void {
 
 const isDirectExecution =
     typeof process.argv[1] === "string" &&
+    // eslint-disable-next-line unicorn/prefer-import-meta-properties -- Node support rule flags import.meta.filename despite current engine backport support constraints
     fileURLToPath(import.meta.url) === process.argv[1];
 
 /**

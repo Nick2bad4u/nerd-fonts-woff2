@@ -358,6 +358,9 @@ function matchesFilters(entry, styleFilter, variantFilter) {
     return styleOk && variantOk;
 }
 
+/**
+ * Re-renders the index UI using the current search text and active filters.
+ */
 function render() {
     const query = searchInput.value.trim().toLowerCase();
     const version = versionInput.value.trim() || "main";
@@ -485,6 +488,9 @@ function render() {
     }
 }
 
+/**
+ * Loads the generated WOFF2 index JSON and triggers the initial render pass.
+ */
 async function loadIndex() {
     try {
         const response = await fetch("./fonts/woff2/index.json", {

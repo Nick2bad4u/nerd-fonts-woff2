@@ -7,3 +7,5 @@
 
 // Label the process for easier identification during test runs.
 process.title = "vitest:nerd-fonts-woff2";
+
+export const vitestSetupLoaded = true;
