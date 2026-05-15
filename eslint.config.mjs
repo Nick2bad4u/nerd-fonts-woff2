@@ -1,8 +1,8 @@
-import nick2bad4u from "eslint-config-nick2bad4u";
+import nickTwoBadFourU from "eslint-config-nick2bad4u";
 
 // Re-use the @typescript-eslint plugin reference already loaded by eslint-config-nick2bad4u
 // to avoid importing it as a direct (extraneous) dependency.
-const tsPlugin = nick2bad4u.configs.all.find(
+const tsPlugin = nickTwoBadFourU.configs.all.find(
     (c) => c.plugins?.["@typescript-eslint"]
 )?.plugins?.["@typescript-eslint"];
 
@@ -13,7 +13,7 @@ const config = [
     },
     // @ts-expect-error - The type definitions for ESLint configs are very loose
 
-    ...nick2bad4u.configs.all,
+    ...nickTwoBadFourU.configs.all,
     {
         // Function declarations are hoisted in JS/TS — forward references are safe.
         // perfectionist/sort-modules requires alphabetical order, which means entry-point
@@ -27,6 +27,7 @@ const config = [
                 "warn",
                 { functions: false },
             ],
+            "no-use-before-define": ["error", { functions: false }],
         },
     },
     // @ts-expect-error - The type definitions for ESLint configs are very loose
@@ -47,6 +48,26 @@ const config = [
         files: ["**/*.html"],
         rules: {
             "@stylistic/spaced-comment": "off",
+        },
+    },
+    // @ts-expect-error - The type definitions for ESLint configs are very loose
+    {
+        // Browser assets and Node scripts use JSDoc primarily for editor hints.
+        // strict undefined-type/throws enforcement is too noisy for these files.
+        files: ["assets/font-index.js", "scripts/**/*.mjs"],
+        rules: {
+            "jsdoc/match-description": "off",
+            "jsdoc/no-blank-blocks": "off",
+            "jsdoc/no-undefined-types": "off",
+            "jsdoc/require-throws": "off",
+        },
+    },
+    // @ts-expect-error - The type definitions for ESLint configs are very loose
+    {
+        // This CLI intentionally operates on validated runtime paths.
+        files: ["src/cli.ts"],
+        rules: {
+            "security/detect-non-literal-fs-filename": "off",
         },
     },
 ];
