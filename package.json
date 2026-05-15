@@ -1,7 +1,7 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "name": "nerd-fonts-woff2",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "private": false,
     "description": "CLI pipeline for converting Nerd Fonts (and other fonts) from TTF/OTF to WOFF2 assets.",
     "keywords": [
