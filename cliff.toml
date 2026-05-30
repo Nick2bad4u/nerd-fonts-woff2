@@ -72,7 +72,7 @@ footer = """
 ## ⭐ Contributors
 Thanks to all the [contributors](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/graphs/contributors) for their hard work!
 ## 📜 License
-This project is licensed under the [UnLicense](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/blob/main/LICENSE)
+This project license is here: [Project License](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/blob/main/LICENSE)
 *This changelog was automatically generated with [git-cliff](https://github.com/orhun/git-cliff).*
 """
 # Remove leading and trailing whitespace from the changelog content
