@@ -90,7 +90,8 @@
         "test:ci": "vitest run --config vite.config.ts --coverage --reporter=github-actions --reporter=dot --reporter=junit --outputFile=test-report.junit.xml --silent",
         "test:coverage": "vitest run --config vite.config.ts --coverage",
         "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.eslint.json --noEmit && tsc -p tsconfig.js.json --noEmit",
-        "update-deps": "npx ncu -i --install never && npm run sync:node-version-files && npm update --all --force && npm install --force"
+        "update-deps": "npx ncu -i --install never && npm run sync:node-version-files && npm update --all --force && npm install --force",
+        "update-actions": "npx actions-up --yes --style sha"
     },
     "dependencies": {
         "ts-extras": "^1.0.0",
