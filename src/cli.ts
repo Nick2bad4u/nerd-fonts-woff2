@@ -1,10 +1,10 @@
-import type { FileHandle } from "node:fs/promises";
 import type { UnknownRecord } from "type-fest";
 
 import { execFile } from "node:child_process";
 import {
     access,
     copyFile,
+    type FileHandle,
     constants as fsConstants,
     mkdir,
     open,
@@ -13,7 +13,7 @@ import {
     stat,
     writeFile,
 } from "node:fs/promises";
-import path from "node:path";
+import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     arrayAt,

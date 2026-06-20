@@ -1,6 +1,6 @@
-## Summary
+# Summary
 
-- Describe the change clearly and briefly.
+- Describe the change briefly.
 
 ## Validation
 
