@@ -1,138 +1,138 @@
 {
-    "$schema": "https://www.schemastore.org/package.json",
-    "name": "nerd-fonts-woff2",
-    "version": "1.0.5",
-    "private": false,
-    "description": "CLI pipeline for converting Nerd Fonts (and other fonts) from TTF/OTF to WOFF2 assets.",
-    "keywords": [
-        "fonts",
-        "woff2",
-        "nerdfonts",
-        "nerd-font",
-        "nerd-fonts",
-        "cli",
-        "webfont",
-        "ttf",
-        "conversion"
-    ],
-    "homepage": "https://nick2bad4u.github.io/nerd-fonts-woff2",
-    "bugs": {
-        "url": "https://github.com/Nick2bad4u/nerd-fonts-woff2/issues"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/Nick2bad4u/nerd-fonts-woff2.git"
-    },
-    "license": "MIT",
-    "author": {
-        "name": "Nick2bad4u",
-        "email": "20943337+Nick2bad4u@users.noreply.github.com",
-        "url": "https://github.com/Nick2bad4u"
-    },
-    "contributors": [
-        {
-            "name": "Nick2bad4u",
-            "email": "20943337+Nick2bad4u@users.noreply.github.com",
-            "url": "https://github.com/Nick2bad4u"
-        }
-    ],
-    "sideEffects": false,
-    "type": "module",
-    "exports": {
-        ".": {
-            "import": "./dist/cli.js",
-            "types": "./dist/cli.d.ts"
-        }
-    },
-    "main": "./dist/cli.js",
-    "types": "./dist/cli.d.ts",
-    "bin": {
-        "nerd-fonts-woff2": "nerd-fonts-woff2"
-    },
-    "files": [
-        "nerd-fonts-woff2",
-        "dist",
-        "README.md",
-        "LICENSE"
-    ],
-    "scripts": {
-        "assets:generate": "npm run fonts:convert",
-        "assets:plan": "npm run fonts:plan",
-        "build": "tsc -p tsconfig.build.json",
-        "dev": "node ./src/cli.ts",
-        "final": "npm install && npm run build && npm run typecheck && npm run lint:fix:quiet && npm run test && npm run fonts:setup && npm run fonts:check-upstream && npm run fonts:download && npm run fonts:convert && npm run fonts:verify",
-        "fonts:check-upstream": "node ./scripts/check-nerd-fonts-updates.mjs",
-        "fonts:convert": "node ./scripts/bulk-convert-fonts.mjs",
-        "fonts:convert:cli": "npm run build && node ./scripts/convert-font-assets.mjs",
-        "fonts:convert:dry-run": "node ./scripts/bulk-convert-fonts.mjs --dry-run",
-        "fonts:download": "node ./scripts/download-nerd-fonts-sources.mjs",
-        "fonts:local": "npm run fonts:setup && npm run fonts:download && npm run fonts:convert && npm run fonts:verify",
-        "fonts:plan": "node ./scripts/bulk-convert-fonts.mjs --dry-run",
-        "fonts:setup": "node ./scripts/setup-converter.mjs",
-        "fonts:verify": "node ./scripts/verify-font-assets.mjs",
-        "format": "prettier . --write",
-        "format:check": "prettier . --check",
-        "lint": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache",
-        "lint:all": "npm run lint:prettier && npm run lint && npm run typecheck",
-        "lint:all:fix": "npm run lint:prettier:fix && npm run lint:fix && npm run typecheck",
-        "lint:all:fix:quiet": "npm run lint:prettier:fix && npm run lint:fix && npm run typecheck",
-        "lint:fix": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
-        "lint:fix:quiet": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
-        "lint:prettier": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --check",
-        "lint:prettier:fix": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --write",
-        "lint:remark": "remark --rc-path .remarkrc.mjs --silently-ignore --ignore-path .remarkignore  .",
-        "lint:remark:fix": "remark --rc-path .remarkrc.mjs --silently-ignore --ignore-path .remarkignore --output .",
-        "prepack": "npm run build",
-        "release:check": "npm run lint:all && npm test",
-        "start": "node ./src/cli.ts",
-        "sync:node-version-files": "node scripts/sync-node-version-files.mjs",
-        "test": "vitest run --config vite.config.ts",
-        "test:ci": "vitest run --config vite.config.ts --coverage --reporter=github-actions --reporter=dot --reporter=junit --outputFile=test-report.junit.xml --silent",
-        "test:coverage": "vitest run --config vite.config.ts --coverage",
-        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.eslint.json --noEmit && tsc -p tsconfig.js.json --noEmit",
-        "update-deps": "npx ncu -i --install never && npm run sync:node-version-files && npm update --all --force && npm install --force",
-        "update-actions": "npx actions-up --yes --style sha"
-    },
-    "dependencies": {
-        "ts-extras": "^1.0.0",
-        "ttf2woff2": "^8.0.1",
-        "type-fest": "^5.6.0"
-    },
-    "devDependencies": {
-        "@eslint/js": "^10.0.1",
-        "@types/node": "^25.8.0",
-        "@vitest/coverage-v8": "^4.1.6",
-        "eslint": "^10.3.0",
-        "eslint-config-nick2bad4u": "^1.0.16",
-        "globals": "^17.6.0",
-        "prettier": "^3.8.3",
-        "prettier-config-nick2bad4u": "^1.0.13",
-        "remark": "^15.0.1",
-        "remark-cli": "^12.0.1",
-        "remark-config-nick2bad4u": "^1.0.2",
-        "secretlint": "^13.0.0",
-        "secretlint-config-nick2bad4u": "^1.0.5",
-        "stylelint": "^17.11.1",
-        "stylelint-config-nick2bad4u": "^1.0.11",
-        "typescript": "^6.0.3",
-        "typescript-eslint": "^8.59.3",
-        "vitest": "^4.1.6"
-    },
-    "packageManager": "npm@11.14.1",
-    "engines": {
-        "node": ">=22.18.0"
-    },
-    "devEngines": {
-        "packageManager": {
-            "name": "npm",
-            "version": ">=10.0.0"
-        },
-        "runtime": {
-            "name": "node",
-            "version": ">=22.18.0"
-        }
-    },
-    "publishConfig": {
-        "registry": "https://registry.npmjs.org"
+  "$schema": "https://www.schemastore.org/package.json",
+  "name": "nerd-fonts-woff2",
+  "version": "1.0.5",
+  "private": false,
+  "description": "CLI pipeline for converting Nerd Fonts (and other fonts) from TTF/OTF to WOFF2 assets.",
+  "keywords": [
+    "fonts",
+    "woff2",
+    "nerdfonts",
+    "nerd-font",
+    "nerd-fonts",
+    "cli",
+    "webfont",
+    "ttf",
+    "conversion"
+  ],
+  "homepage": "https://nick2bad4u.github.io/nerd-fonts-woff2",
+  "bugs": {
+    "url": "https://github.com/Nick2bad4u/nerd-fonts-woff2/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nick2bad4u/nerd-fonts-woff2.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Nick2bad4u",
+    "email": "20943337+Nick2bad4u@users.noreply.github.com",
+    "url": "https://github.com/Nick2bad4u"
+  },
+  "contributors": [
+    {
+      "name": "Nick2bad4u",
+      "email": "20943337+Nick2bad4u@users.noreply.github.com",
+      "url": "https://github.com/Nick2bad4u"
     }
+  ],
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/cli.js",
+      "types": "./dist/cli.d.ts"
+    }
+  },
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
+  "bin": {
+    "nerd-fonts-woff2": "nerd-fonts-woff2"
+  },
+  "files": [
+    "nerd-fonts-woff2",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "assets:generate": "npm run fonts:convert",
+    "assets:plan": "npm run fonts:plan",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "node ./src/cli.ts",
+    "final": "npm install && npm run build && npm run typecheck && npm run lint:fix:quiet && npm run test && npm run fonts:setup && npm run fonts:check-upstream && npm run fonts:download && npm run fonts:convert && npm run fonts:verify",
+    "fonts:check-upstream": "node ./scripts/check-nerd-fonts-updates.mjs",
+    "fonts:convert": "node ./scripts/bulk-convert-fonts.mjs",
+    "fonts:convert:cli": "npm run build && node ./scripts/convert-font-assets.mjs",
+    "fonts:convert:dry-run": "node ./scripts/bulk-convert-fonts.mjs --dry-run",
+    "fonts:download": "node ./scripts/download-nerd-fonts-sources.mjs",
+    "fonts:local": "npm run fonts:setup && npm run fonts:download && npm run fonts:convert && npm run fonts:verify",
+    "fonts:plan": "node ./scripts/bulk-convert-fonts.mjs --dry-run",
+    "fonts:setup": "node ./scripts/setup-converter.mjs",
+    "fonts:verify": "node ./scripts/verify-font-assets.mjs",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "lint": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache",
+    "lint:all": "npm run lint:prettier && npm run lint && npm run typecheck",
+    "lint:all:fix": "npm run lint:prettier:fix && npm run lint:fix && npm run typecheck",
+    "lint:all:fix:quiet": "npm run lint:prettier:fix && npm run lint:fix && npm run typecheck",
+    "lint:fix": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
+    "lint:fix:quiet": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
+    "lint:prettier": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --check",
+    "lint:prettier:fix": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --write",
+    "lint:remark": "remark --rc-path .remarkrc.mjs --silently-ignore --ignore-path .remarkignore  .",
+    "lint:remark:fix": "remark --rc-path .remarkrc.mjs --silently-ignore --ignore-path .remarkignore --output .",
+    "prepack": "npm run build",
+    "release:check": "npm run lint:all && npm test",
+    "start": "node ./src/cli.ts",
+    "sync:node-version-files": "node scripts/sync-node-version-files.mjs",
+    "test": "vitest run --config vite.config.ts",
+    "test:ci": "vitest run --config vite.config.ts --coverage --reporter=github-actions --reporter=dot --reporter=junit --outputFile=test-report.junit.xml --silent",
+    "test:coverage": "vitest run --config vite.config.ts --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.eslint.json --noEmit && tsc -p tsconfig.js.json --noEmit",
+    "update-actions": "npx actions-up --yes --style sha",
+    "update-deps": "npx ncu -i --install never && npm run sync:node-version-files && npm update --all --force && npm install --force"
+  },
+  "dependencies": {
+    "ts-extras": "^1.0.0",
+    "ttf2woff2": "^8.0.1",
+    "type-fest": "^5.6.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.8.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^10.5.0",
+    "eslint-config-nick2bad4u": "^2.0.4",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.3",
+    "prettier-config-nick2bad4u": "^1.0.13",
+    "remark": "^15.0.1",
+    "remark-cli": "^12.0.1",
+    "remark-config-nick2bad4u": "^1.0.2",
+    "secretlint": "^13.0.0",
+    "secretlint-config-nick2bad4u": "^1.0.5",
+    "stylelint": "^17.11.1",
+    "stylelint-config-nick2bad4u": "^1.0.11",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.3",
+    "vitest": "^4.1.6"
+  },
+  "packageManager": "npm@11.14.1",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": ">=10.0.0"
+    },
+    "runtime": {
+      "name": "node",
+      "version": ">=22.18.0"
+    }
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  }
 }
