@@ -47,7 +47,8 @@ function slugify(value) {
     return value
         .toLowerCase()
         .replaceAll(/[^a-z0-9]+/gu, "-")
-        .replaceAll(/^-+|-+$/gu, "")
+        .replaceAll(/^-/gu, "")
+        .replaceAll(/-$/gu, "")
         .slice(0, 120);
 }
 
