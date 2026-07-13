@@ -1,58 +1,58 @@
-name: Bug report
-description: Report a reproducible bug in nerd-fonts-woff2
+name: "Bug report"
+description: "Report a reproducible bug in nerd-fonts-woff2"
 title: "[Bug]: "
 labels:
-    - bug
+    - "bug"
 body:
-    - type: textarea
-      id: summary
+    - type: "textarea"
+      id: "summary"
       attributes:
-          label: Summary
-          description: What went wrong?
+          label: "Summary"
+          description: "What went wrong?"
       validations:
           required: true
 
-    - type: textarea
-      id: steps
+    - type: "textarea"
+      id: "steps"
       attributes:
-          label: Steps to reproduce
-          description: Include exact command(s), config, and flags used.
+          label: "Steps to reproduce"
+          description: "Include exact command(s), config, and flags used."
           placeholder: |
               1. nerd-fonts-woff2 --source-dir ./temp/fonts --dry-run
               2. ...
       validations:
           required: true
 
-    - type: textarea
-      id: expected
+    - type: "textarea"
+      id: "expected"
       attributes:
-          label: Expected behavior
+          label: "Expected behavior"
       validations:
           required: true
 
-    - type: textarea
-      id: actual
+    - type: "textarea"
+      id: "actual"
       attributes:
-          label: Actual behavior
+          label: "Actual behavior"
       validations:
           required: true
 
-    - type: input
-      id: extension-version
+    - type: "input"
+      id: "extension-version"
       attributes:
-          label: Project version
-          placeholder: 0.1.0
+          label: "Project version"
+          placeholder: "0.1.0"
 
-    - type: input
-      id: node-version
+    - type: "input"
+      id: "node-version"
       attributes:
-          label: Node.js version
-          placeholder: node -v output
+          label: "Node.js version"
+          placeholder: "node -v output"
       validations:
           required: true
 
-    - type: textarea
-      id: additional
+    - type: "textarea"
+      id: "additional"
       attributes:
-          label: Additional context
-          description: Any logs, JSON output, or screenshots.
+          label: "Additional context"
+          description: "Any logs, JSON output, or screenshots."

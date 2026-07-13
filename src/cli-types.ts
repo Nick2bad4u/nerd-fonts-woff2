@@ -26,7 +26,9 @@ export type Mode = "convert" | "plan";
  */
 export type ParsedOptions = Record<
     string,
-    boolean | readonly string[] | string
+    | boolean
+    | readonly string[]
+    | string
 >;
 
 /**

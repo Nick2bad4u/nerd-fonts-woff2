@@ -141,13 +141,13 @@ Example manifest:
 
 ```json
 {
-  "sourceDirs": ["./fonts/original"],
-  "outDir": "./fonts/woff2",
-  "tempDir": "./temp/work",
-  "converter": "node",
-  "converterArgs": ["./scripts/node-woff2-compress.mjs"],
-  "includeExts": ["ttf", "otf"],
-  "indexFile": "./fonts/woff2/index.json"
+ "sourceDirs": ["./fonts/original"],
+ "outDir": "./fonts/woff2",
+ "tempDir": "./temp/work",
+ "converter": "node",
+ "converterArgs": ["./scripts/node-woff2-compress.mjs"],
+ "includeExts": ["ttf", "otf"],
+ "indexFile": "./fonts/woff2/index.json"
 }
 ```
 

@@ -255,7 +255,7 @@ describe("cli main", () => {
             manifestFile,
             JSON.stringify({
                 // Whitespace-only converter in manifest is stored as-is and triggers error
-                converter: "   ",
+                converter: " ".repeat(3),
                 sourceDirs: [sourceDir],
             })
         );
@@ -486,7 +486,7 @@ describe("cli main", () => {
             ]);
 
             expect(code).toBe(0);
-            expect(existsSync(expectedIndex)).toBeFalsy();
+            expect(existsSync(expectedIndex)).toBe(false);
         } finally {
             rmSync(root, { force: true, recursive: true });
         }
@@ -533,7 +533,7 @@ describe("cli main", () => {
     // ─── Conversion ───────────────────────────────────────────────────────────
 
     it("converts a font when using a custom converter command", async () => {
-        expect.assertions(5);
+        expect.assertions(4);
 
         vi.spyOn(process.stdout, "write").mockReturnValue(true);
         vi.spyOn(process.stderr, "write").mockReturnValue(true);
@@ -581,8 +581,7 @@ describe("cli main", () => {
             const [firstEntry] = parsedIndex;
             assert.ok(firstEntry);
 
-            expect(firstEntry).toBeDefined();
-            expect(existsSync(firstEntry.outputPath)).toBeTruthy();
+            expect(existsSync(firstEntry.outputPath)).toBe(true);
         } finally {
             rmSync(root, { force: true, recursive: true });
         }
@@ -621,7 +620,7 @@ describe("cli main", () => {
             ]);
 
             expect(code).toBe(0);
-            expect(existsSync(expectedIndex)).toBeTruthy();
+            expect(existsSync(expectedIndex)).toBe(true);
             expect(readFileSync(expectedIndex, "utf8")).toContain(
                 "DefaultIndex-Regular.woff2"
             );

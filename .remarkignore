@@ -832,3 +832,5 @@ docs/Guides/TODO.md
 # fonts
 **/fonts/**
 AGENTS.md
+**/agent-commit-message-instructions.md
+.github/agent-commit-message-instructions.md
