@@ -9,7 +9,11 @@ const tsPlugin = nickTwoBadFourU.configs.all.find(
 /** @type {import("eslint").Linter.Config[]} */
 const config = [
     {
-        ignores: ["fonts/original/**", "fonts/woff2/**"],
+        ignores: [
+            "assets/font-index.js",
+            "fonts/original/**",
+            "fonts/woff2/**",
+        ],
     },
     // @ts-expect-error - The type definitions for ESLint configs are very loose
 
@@ -47,6 +51,7 @@ const config = [
         // linting index.html.
         files: ["**/*.html"],
         rules: {
+            "@html-eslint/no-extra-spacing-tags": "off",
             "@stylistic/spaced-comment": "off",
         },
     },
@@ -67,7 +72,20 @@ const config = [
         // This CLI intentionally operates on validated runtime paths.
         files: ["src/cli.ts"],
         rules: {
+            // The shared rules currently conflict: unicorn prefers Error.isError,
+            // while canonical rejects the same native static method.
+            "canonical/no-import-namespace-destructure": "off",
+            "canonical/no-use-extend-native": "off",
             "security/detect-non-literal-fs-filename": "off",
+        },
+    },
+    // @ts-expect-error - The type definitions for ESLint configs are very loose
+    {
+        // This integration suite intentionally covers the full CLI lifecycle in
+        // one fixture-backed test group.
+        files: ["test/cli.test.ts"],
+        rules: {
+            "max-lines-per-function": "off",
         },
     },
 ];

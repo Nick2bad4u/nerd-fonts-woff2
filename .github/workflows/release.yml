@@ -2,9 +2,9 @@
 # - Assumes WOFF2 assets are committed in-repo (for raw GitHub/jsDelivr usage).
 # - Publishes npm package via trusted publishing (OIDC) when package is not private.
 # yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
-name: Release
+name: "Release"
 
-run-name: Release • ${{ github.ref_name }} @${{ github.actor }}
+run-name: "Release • ${{ github.ref_name }} @${{ github.actor }}"
 
 on:
     push:
@@ -15,24 +15,24 @@ on:
             release_type:
                 description: "Release bump type"
                 required: true
-                default: patch
-                type: choice
+                default: "patch"
+                type: "choice"
                 options:
-                    - patch
-                    - minor
-                    - major
+                    - "patch"
+                    - "minor"
+                    - "major"
             version:
                 description: "Explicit release version in x.y.z format (overrides release_type)"
                 required: false
-                type: string
+                type: "string"
             ref:
                 description: "Branch to release from when running manually"
                 required: false
-                default: main
-                type: string
+                default: "main"
+                type: "string"
 
 permissions:
-    contents: read
+    contents: "read"
 
 concurrency:
     group: "${{ github.workflow }}-${{ github.repository }}"
@@ -40,35 +40,35 @@ concurrency:
 
 jobs:
     release:
-        name: Publish npm + GitHub release
-        if: ${{ github.event_name != 'push' || github.actor != 'github-actions[bot]' }}
-        runs-on: ubuntu-latest
+        name: "Publish npm + GitHub release"
+        if: "${{ github.event_name != 'push' || github.actor != 'github-actions[bot]' }}"
+        runs-on: "ubuntu-latest"
         timeout-minutes: 45
         permissions:
-            contents: write
-            id-token: write
+            contents: "write"
+            id-token: "write"
         defaults:
             run:
-                shell: bash
+                shell: "bash"
         env:
             NPM_REGISTRY_URL: "https://registry.npmjs.org"
             DEFAULT_RELEASE_BRANCH: "main"
         outputs:
-            tag: ${{ steps.meta.outputs.tag }}
-            version: ${{ steps.meta.outputs.version }}
-            package_name: ${{ steps.meta.outputs.package_name }}
-            package_private: ${{ steps.meta.outputs.package_private }}
+            tag: "${{ steps.meta.outputs.tag }}"
+            version: "${{ steps.meta.outputs.version }}"
+            package_name: "${{ steps.meta.outputs.package_name }}"
+            package_private: "${{ steps.meta.outputs.package_private }}"
 
         steps:
-            - name: Harden the runner (Audit all outbound calls)
-              uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+            - name: "Harden the runner (Audit all outbound calls)"
+              uses: "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411" # v2.19.4
               with:
-                  egress-policy: audit
+                  egress-policy: "audit"
 
-            - name: Resolve target ref
-              id: target
+            - name: "Resolve target ref"
+              id: "target"
               env:
-                  DISPATCH_REF: ${{ inputs.ref }}
+                  DISPATCH_REF: "${{ inputs.ref }}"
               run: |
                   set -euo pipefail
                   if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -81,25 +81,25 @@ jobs:
                     echo "branch=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
                   fi
 
-            - name: Checkout
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: "Checkout"
+              uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" # v7.0.0
               with:
                   fetch-depth: 0
                   fetch-tags: true
-                  ref: ${{ steps.target.outputs.ref }}
+                  ref: "${{ steps.target.outputs.ref }}"
 
-            - name: Setup Node.js
-              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+            - name: "Setup Node.js"
+              uses: "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e" # v6.4.0
               with:
-                  node-version-file: .node-version
-                  registry-url: ${{ env.NPM_REGISTRY_URL }}
-                  cache: npm
-                  cache-dependency-path: package-lock.json
+                  node-version-file: ".node-version"
+                  registry-url: "${{ env.NPM_REGISTRY_URL }}"
+                  cache: "npm"
+                  cache-dependency-path: "package-lock.json"
 
-            - name: Install dependencies
-              run: npm ci --ignore-scripts
+            - name: "Install dependencies"
+              run: "npm ci --ignore-scripts"
 
-            - name: Validate committed asset tree
+            - name: "Validate committed asset tree"
               run: |
                   set -euo pipefail
                   if [ ! -d "fonts/woff2" ]; then
@@ -113,11 +113,11 @@ jobs:
                     exit 1
                   fi
 
-            - name: Validate release input
-              if: github.event_name == 'workflow_dispatch'
+            - name: "Validate release input"
+              if: "github.event_name == 'workflow_dispatch'"
               env:
-                  EXPLICIT_VERSION: ${{ inputs.version }}
-                  RELEASE_TYPE: ${{ inputs.release_type }}
+                  EXPLICIT_VERSION: "${{ inputs.version }}"
+                  RELEASE_TYPE: "${{ inputs.release_type }}"
               run: |
                   set -euo pipefail
                   if [ -n "${EXPLICIT_VERSION:-}" ]; then
@@ -136,14 +136,14 @@ jobs:
                       ;;
                   esac
 
-            - name: Verify project quality gates
-              run: npm run release:check
+            - name: "Verify project quality gates"
+              run: "npm run release:check"
 
-            - name: Resolve release metadata
-              id: meta
+            - name: "Resolve release metadata"
+              id: "meta"
               env:
-                  EXPLICIT_VERSION: ${{ inputs.version }}
-                  RELEASE_TYPE: ${{ inputs.release_type }}
+                  EXPLICIT_VERSION: "${{ inputs.version }}"
+                  RELEASE_TYPE: "${{ inputs.release_type }}"
               run: |
                   set -euo pipefail
 
@@ -167,22 +167,24 @@ jobs:
                   package_private=$(node -p "String(Boolean(require('./package.json').private))")
                   tag="v${version}"
 
-                  echo "version=$version" >> "$GITHUB_OUTPUT"
-                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
-                  echo "package_name=$package_name" >> "$GITHUB_OUTPUT"
-                  echo "package_private=$package_private" >> "$GITHUB_OUTPUT"
+                  {
+                    echo "version=$version"
+                    echo "tag=$tag"
+                    echo "package_name=$package_name"
+                    echo "package_private=$package_private"
+                  } >> "$GITHUB_OUTPUT"
 
-            - name: Configure git
-              if: github.event_name == 'workflow_dispatch'
+            - name: "Configure git"
+              if: "github.event_name == 'workflow_dispatch'"
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            - name: Commit and push release version + tag
-              if: github.event_name == 'workflow_dispatch'
+            - name: "Commit and push release version + tag"
+              if: "github.event_name == 'workflow_dispatch'"
               env:
-                  TAG: ${{ steps.meta.outputs.tag }}
-                  BRANCH: ${{ steps.target.outputs.branch }}
+                  TAG: "${{ steps.meta.outputs.tag }}"
+                  BRANCH: "${{ steps.target.outputs.branch }}"
               run: |
                   set -euo pipefail
 
@@ -200,11 +202,11 @@ jobs:
                   git push origin "HEAD:${BRANCH}"
                   git push origin "$TAG"
 
-            - name: Check whether version already exists on npm
-              id: npm_check
+            - name: "Check whether version already exists on npm"
+              id: "npm_check"
               env:
-                  PACKAGE_NAME: ${{ steps.meta.outputs.package_name }}
-                  VERSION: ${{ steps.meta.outputs.version }}
+                  PACKAGE_NAME: "${{ steps.meta.outputs.package_name }}"
+                  VERSION: "${{ steps.meta.outputs.version }}"
               run: |
                   set -euo pipefail
                   if npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1; then
@@ -213,27 +215,27 @@ jobs:
                     echo "already_published=false" >> "$GITHUB_OUTPUT"
                   fi
 
-            - name: Publish npm package (OIDC)
-              if: steps.meta.outputs.package_private != 'true' && steps.npm_check.outputs.already_published != 'true'
-              run: npm publish --access public --provenance
+            - name: "Publish npm package (OIDC)"
+              if: "steps.meta.outputs.package_private != 'true' && steps.npm_check.outputs.already_published != 'true'"
+              run: "npm publish --access public --provenance"
 
-            - name: Skip npm publish for private package
-              if: steps.meta.outputs.package_private == 'true'
-              run: echo "Skipping npm publish because package.json has private=true."
+            - name: "Skip npm publish for private package"
+              if: "steps.meta.outputs.package_private == 'true'"
+              run: "echo 'Skipping npm publish because package.json has private=true.'"
 
-            - name: Create GitHub release
-              uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+            - name: "Create GitHub release"
+              uses: "softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b" # v3.0.1
               with:
-                  tag_name: ${{ steps.meta.outputs.tag }}
-                  name: ${{ steps.meta.outputs.tag }}
+                  tag_name: "${{ steps.meta.outputs.tag }}"
+                  name: "${{ steps.meta.outputs.tag }}"
                   generate_release_notes: true
                   draft: false
                   prerelease: false
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
-            - name: Release summary
-              if: ${{ !cancelled() }}
+            - name: "Release summary"
+              if: "${{ !cancelled() }}"
               run: |
                   {
                     echo "## Release Summary"

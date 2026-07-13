@@ -1,31 +1,31 @@
-name: Feature request
-description: Suggest an enhancement for nerd-fonts-woff2
+name: "Feature request"
+description: "Suggest an enhancement for nerd-fonts-woff2"
 title: "[Feature]: "
 labels:
-    - enhancement
+    - "enhancement"
 body:
-    - type: textarea
-      id: problem
+    - type: "textarea"
+      id: "problem"
       attributes:
-          label: Problem statement
-          description: What font conversion/publishing workflow problem are you trying to solve?
+          label: "Problem statement"
+          description: "What font conversion/publishing workflow problem are you trying to solve?"
       validations:
           required: true
 
-    - type: textarea
-      id: proposed
+    - type: "textarea"
+      id: "proposed"
       attributes:
-          label: Proposed solution
-          description: Describe the command UX and expected output.
+          label: "Proposed solution"
+          description: "Describe the command UX and expected output."
       validations:
           required: true
 
-    - type: textarea
-      id: alternatives
+    - type: "textarea"
+      id: "alternatives"
       attributes:
-          label: Alternatives considered
+          label: "Alternatives considered"
 
-    - type: textarea
-      id: extra
+    - type: "textarea"
+      id: "extra"
       attributes:
-          label: Additional context
+          label: "Additional context"

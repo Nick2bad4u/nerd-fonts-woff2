@@ -1,112 +1,114 @@
-name: Continuous Integration
+name: "Continuous Integration"
 
-run-name: Continuous Integration • ${{ github.ref_name }} @${{ github.actor }}
+run-name: "Continuous Integration • ${{ github.ref_name }} @${{ github.actor }}"
 
 concurrency:
-    group: ci-${{ github.workflow }}-${{ github.ref }}
+    group: "ci-${{ github.workflow }}-${{ github.ref }}"
     cancel-in-progress: true
 
 on:
     push:
         branches:
-            - main
+            - "main"
     pull_request:
     merge_group:
         types:
-            - checks_requested
+            - "checks_requested"
 
 permissions:
-    contents: read
+    contents: "read"
 
 jobs:
     test:
-        name: Test (${{ matrix.label }})
-        runs-on: ${{ matrix.os }}
+        name: "Test (${{ matrix.label }})"
+        runs-on: "${{ matrix.os }}"
         timeout-minutes: 60
         permissions:
-            contents: read
-            id-token: write
+            contents: "read"
+            id-token: "write"
         strategy:
             fail-fast: true
             matrix:
                 include:
-                    - label: linux
-                      os: ubuntu-latest
-                      codecov_flag: os-linux
-                    - label: windows
-                      os: windows-latest
-                      codecov_flag: os-windows
-                    - label: macos
-                      os: macos-latest
-                      codecov_flag: os-macos
+                    - label: "linux"
+                      os: "ubuntu-latest"
+                      codecov_flag: "os-linux"
+                    - label: "windows"
+                      os: "windows-latest"
+                      codecov_flag: "os-windows"
+                    - label: "macos"
+                      os: "macos-latest"
+                      codecov_flag: "os-macos"
         defaults:
             run:
-                shell: bash
+                shell: "bash"
 
         steps:
-            - name: Harden the runner (Audit all outbound calls)
-              if: ${{ matrix.os == 'ubuntu-latest' }}
-              uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+            - name: "Harden the runner (Audit all outbound calls)"
+              if: "${{ matrix.os == 'ubuntu-latest' }}"
+              uses: "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411" # v2.19.4
               with:
-                  egress-policy: audit
+                  egress-policy: "audit"
 
-            - name: Checkout repository
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: "Checkout repository"
+              uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" # v7.0.0
 
-            - name: Setup Node.js
-              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+            - name: "Setup Node.js"
+              uses: "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e" # v6.4.0
               with:
-                  node-version-file: .node-version
-                  cache: npm
-                  cache-dependency-path: package-lock.json
+                  node-version-file: ".node-version"
+                  cache: "npm"
+                  cache-dependency-path: "package-lock.json"
 
-            - name: Install dependencies
-              run: npm ci --ignore-scripts
+            - name: "Install dependencies"
+              run: "npm ci --ignore-scripts"
 
-            - name: Build package
-              run: npm run build
+            - name: "Build package"
+              run: "npm run build"
 
-            - name: Typecheck
-              run: npm run typecheck
+            - name: "Typecheck"
+              run: "npm run typecheck"
 
-            - name: Lint
-              run: npm run lint
+            - name: "Lint"
+              run: "npm run lint"
 
-            - name: Run tests with coverage and JUnit report
-              run: npm run test:ci
+            - name: "Run tests with coverage and JUnit report"
+              run: "npm run test:ci"
               env:
                   CI: "true"
 
-            - name: Verify coverage artifact
-              run: python -c "from pathlib import Path; assert Path('coverage/lcov.info').is_file(), 'coverage/lcov.info was not generated'"
+            - name: "Verify coverage artifact"
+              run: >-
+                  python -c "from pathlib import Path; assert Path('coverage/lcov.info').is_file(), 'coverage/lcov.info was not generated'"
 
-            - name: Verify JUnit artifact
-              run: python -c "from pathlib import Path; assert Path('test-report.junit.xml').is_file(), 'test-report.junit.xml was not generated'"
+            - name: "Verify JUnit artifact"
+              run: >-
+                  python -c "from pathlib import Path; assert Path('test-report.junit.xml').is_file(), 'test-report.junit.xml was not generated'"
 
-            - name: Upload test results to Codecov
-              if: ${{ !cancelled() }}
-              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+            - name: "Upload test results to Codecov"
+              if: "${{ !cancelled() }}"
+              uses: "codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f" # v7.0.0
               with:
                   use_oidc: true
-                  slug: ${{ github.repository }}
-                  files: test-report.junit.xml
-                  flags: ${{ matrix.codecov_flag }}
-                  name: vitest-junit-${{ matrix.codecov_flag }}
-                  report_type: test_results
+                  slug: "${{ github.repository }}"
+                  files: "test-report.junit.xml"
+                  flags: "${{ matrix.codecov_flag }}"
+                  name: "vitest-junit-${{ matrix.codecov_flag }}"
+                  report_type: "test_results"
                   fail_ci_if_error: true
                   disable_search: true
                   verbose: true
 
-            - name: Upload coverage to Codecov
-              if: ${{ !cancelled() }}
-              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+            - name: "Upload coverage to Codecov"
+              if: "${{ !cancelled() }}"
+              uses: "codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f" # v7.0.0
               with:
                   use_oidc: true
-                  slug: ${{ github.repository }}
-                  files: ./coverage/lcov.info
-                  flags: ${{ matrix.codecov_flag }}
-                  name: vitest-unit-coverage-${{ matrix.codecov_flag }}
-                  report_type: coverage
+                  slug: "${{ github.repository }}"
+                  files: "./coverage/lcov.info"
+                  flags: "${{ matrix.codecov_flag }}"
+                  name: "vitest-unit-coverage-${{ matrix.codecov_flag }}"
+                  report_type: "coverage"
                   fail_ci_if_error: true
                   disable_search: true
                   verbose: true

@@ -1,10 +1,10 @@
-import type { FileHandle } from "node:fs/promises";
 import type { UnknownRecord } from "type-fest";
 
 import { execFile } from "node:child_process";
 import {
     access,
     copyFile,
+    type FileHandle,
     constants as fsConstants,
     mkdir,
     open,
@@ -13,15 +13,16 @@ import {
     stat,
     writeFile,
 } from "node:fs/promises";
-import path from "node:path";
+import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     arrayAt,
     arrayFirst,
+    arrayIncludes,
     arrayJoin,
     isDefined,
     isEmpty,
-    isFinite,
+    isInteger,
     setHas,
     stringSplit,
 } from "ts-extras";
@@ -46,7 +47,7 @@ function colText(
     code: string,
     stream: Readonly<{ isTTY?: boolean }> = process.stdout
 ): string {
-    return supportsColor(stream) ? `\u001B[${code}m${text}\u001B[0m` : text;
+    return supportsColor(stream) ? `\u{1B}[${code}m${text}\u{1B}[0m` : text;
 }
 
 function supportsColor(stream: Readonly<{ isTTY?: boolean }>): boolean {
@@ -104,7 +105,10 @@ interface ManifestFile {
     tempDir?: string;
 }
 
-type SingleFontResult = "converted" | "failed-break" | "failed-continue";
+type SingleFontResult =
+    | "converted"
+    | "failed-break"
+    | "failed-continue";
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 
@@ -156,7 +160,7 @@ export async function main(argv: readonly string[]): Promise<number> {
             const ext = extname(planned.sourcePath).slice(1).toLowerCase();
             const extLabel = `[.${ext}]`;
             writeOut(
-                `  ${c.cyan(planned.sourcePath)} ${c.dim("\u2192")} ${c.magenta(join(config.outDir, planned.relativeOutputPath))} ${c.dim(extLabel)}`
+                `  ${c.cyan(planned.sourcePath)} ${c.dim("\u{2192}")} ${c.magenta(join(config.outDir, planned.relativeOutputPath))} ${c.dim(extLabel)}`
             );
         }
 
@@ -203,14 +207,13 @@ function buildConverterMessage(stdout: string, stderr: string): string {
 async function buildExecutionConfig(
     options: Readonly<ParsedOptions>
 ): Promise<BuildConfigResult> {
-    const jsonOutput = options["json"] === true;
-
     if (options["help"] === true) {
         printHelp();
         return { code: 0, ok: false };
     }
 
-    const reportError: ErrorReporter = jsonOutput
+    const isJsonOutput = options["json"] === true;
+    const reportError: ErrorReporter = isJsonOutput
         ? emitJsonError
         : emitTextError;
     const manifestResult = await loadManifest(
@@ -274,7 +277,7 @@ async function buildExecutionConfig(
         return timeoutResult;
     }
 
-    const debug = options["debug"] === true;
+    const isDebug = options["debug"] === true;
 
     const { indexFileRaw, outDir, tempDir } = resolveDirectories(
         options,
@@ -286,25 +289,25 @@ async function buildExecutionConfig(
         confirm,
         converter: converterResult.cmd,
         converterArgs: converterResult.args,
-        debug,
+        debug: isDebug,
         dryRun,
         failFast: options["fail-fast"] === true,
         includeExts: extsResult.exts,
-        jsonOutput,
+        jsonOutput: isJsonOutput,
         mode,
         outDir,
         sourceDirs,
         tempDir,
-        verbose: debug || options["verbose"] === true,
-        ...(typeof maxResult.maxFiles === "number"
-            ? { maxFiles: maxResult.maxFiles }
-            : {}),
-        ...(typeof indexFileRaw === "string"
-            ? { indexFile: resolve(indexFileRaw) }
-            : {}),
-        ...(typeof timeoutResult.timeout === "number"
-            ? { timeout: timeoutResult.timeout }
-            : {}),
+        verbose: isDebug || options["verbose"] === true,
+        ...(typeof maxResult.maxFiles === "number" && {
+            maxFiles: maxResult.maxFiles,
+        }),
+        ...(typeof indexFileRaw === "string" && {
+            indexFile: resolve(indexFileRaw),
+        }),
+        ...(typeof timeoutResult.timeout === "number" && {
+            timeout: timeoutResult.timeout,
+        }),
     };
 
     return { config, ok: true };
@@ -320,7 +323,7 @@ async function buildIndexEntries(
             const outputPath = resolve(
                 join(config.outDir, planned.relativeOutputPath)
             );
-            const converted = setHas(convertedTargets, outputPath);
+            const isConverted = setHas(convertedTargets, outputPath);
             const pathSegments = stringSplit(
                 planned.relativeOutputPath.replaceAll("\\", "/"),
                 "/"
@@ -329,7 +332,7 @@ async function buildIndexEntries(
             const sizeBytes = await readFileSizeOrNull(outputPath);
 
             return {
-                converted,
+                converted: isConverted,
                 family: firstSegment,
                 fileName: arrayAt(pathSegments, -1) ?? "",
                 outputPath,
@@ -417,14 +420,16 @@ async function convertFonts(
         await mkdir(config.outDir, { recursive: true });
 
         const queue = [...plan];
+        let queueIndex = 0;
         const limit = Math.max(
             1,
             Math.min(config.concurrency, plan.length > 0 ? plan.length : 1)
         );
 
         const worker = async (): Promise<void> => {
-            while (queue.length > 0 && !shouldStop) {
-                const planned = queue.shift();
+            while (queueIndex < queue.length && !shouldStop) {
+                const planned = queue[queueIndex];
+                queueIndex += 1;
                 if (!isDefined(planned)) {
                     continue;
                 }
@@ -452,7 +457,7 @@ async function convertFonts(
                     converted += 1;
                     if (config.verbose) {
                         writeOut(
-                            `  ${c.green("\u2714")} ${c.cyan(basename(planned.sourcePath))}`
+                            `  ${c.green("\u{2714}")} ${c.cyan(basename(planned.sourcePath))}`
                         );
                     }
                 } else if (result === "failed-break") {
@@ -460,7 +465,7 @@ async function convertFonts(
                     shouldStop = true;
                 } else if (config.verbose) {
                     writeOut(
-                        `  ${c.red("\u2716")} ${c.cyan(basename(planned.sourcePath))}`
+                        `  ${c.red("\u{2716}")} ${c.cyan(basename(planned.sourcePath))}`
                     );
                 } else {
                     // Intentionally silent when verbose logging is disabled.
@@ -596,16 +601,19 @@ function getStringOption(
 
 // ─── Argument parsing ─────────────────────────────────────────────────────────
 function isBooleanFlag(key: string): boolean {
-    return (
-        key === "debug" ||
-        key === "help" ||
-        key === "dry-run" ||
-        key === "confirm" ||
-        key === "yes" ||
-        key === "convert" ||
-        key === "json" ||
-        key === "verbose" ||
-        key === "fail-fast"
+    return arrayIncludes(
+        [
+            "confirm",
+            "convert",
+            "debug",
+            "dry-run",
+            "fail-fast",
+            "help",
+            "json",
+            "verbose",
+            "yes",
+        ],
+        key
     );
 }
 
@@ -621,8 +629,13 @@ async function isDirectory(filePath: string): Promise<boolean> {
 // ─── WOFF2 validation ─────────────────────────────────────────────────────────
 
 function isListFlag(key: string): boolean {
-    return (
-        key === "source-dir" || key === "converter-arg" || key === "include-ext"
+    return arrayIncludes(
+        [
+            "converter-arg",
+            "include-ext",
+            "source-dir",
+        ],
+        key
     );
 }
 
@@ -667,9 +680,11 @@ async function listFontFiles(
 ): Promise<string[]> {
     const discovered: string[] = [];
     const queue: string[] = [sourceDir];
+    let queueIndex = 0;
 
-    while (queue.length > 0) {
-        const current = queue.shift();
+    while (queueIndex < queue.length) {
+        const current = queue[queueIndex];
+        queueIndex += 1;
         if (!isDefined(current)) {
             continue;
         }
@@ -687,19 +702,14 @@ async function listFontFiles(
 
             if (entry.isDirectory()) {
                 queue.push(absolutePath);
-                continue;
-            }
+            } else if (entry.isFile()) {
+                const extension = extname(entry.name)
+                    .replace(/^\./v, "")
+                    .toLowerCase();
 
-            if (!entry.isFile()) {
-                continue;
-            }
-
-            const extension = extname(entry.name)
-                .replace(/^\./v, "")
-                .toLowerCase();
-
-            if (setHas(includeExts, extension)) {
-                discovered.push(absolutePath);
+                if (setHas(includeExts, extension)) {
+                    discovered.push(absolutePath);
+                }
             }
         }
     }
@@ -723,7 +733,7 @@ async function loadManifest(
             ok: true,
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = Error.isError(error) ? error.message : String(error);
         reportError(
             `failed to read --manifest file: ${message}`,
             "validation_error"
@@ -825,9 +835,9 @@ async function parseManifest(pathToManifest: string): Promise<ManifestFile> {
         manifestFile.converterArgs = converterArgs;
     }
 
-    const includeExts = getStringArray("includeExts");
-    if (Array.isArray(includeExts)) {
-        manifestFile.includeExts = includeExts;
+    const includedExtensions = getStringArray("includeExts");
+    if (Array.isArray(includedExtensions)) {
+        manifestFile.includeExts = includedExtensions;
     }
 
     const indexFile = getString("indexFile");
@@ -872,7 +882,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 
 function printTextSummary(
     summary: Readonly<RunSummary>,
-    verbose: boolean
+    isVerbose: boolean
 ): void {
     const modeLabel = `${summary.mode}${summary.dryRun ? " (dry-run)" : ""}`;
     writeOut(`Mode:             ${c.bold(modeLabel)}`);
@@ -900,11 +910,11 @@ function printTextSummary(
         writeOut(`Index file: ${summary.indexFile}`);
     }
 
-    if (verbose && summary.failures.length > 0) {
+    if (isVerbose && summary.failures.length > 0) {
         writeOut("");
         writeOut(c.bold(c.red("Failures:")));
         for (const failure of summary.failures) {
-            writeOut(`  ${c.red("\u2716")} ${failure}`);
+            writeOut(`  ${c.red("\u{2716}")} ${failure}`);
         }
     }
 }
@@ -926,8 +936,8 @@ function resolveConcurrency(
         return { concurrency: 1, ok: true };
     }
 
-    const parsed = Number.parseInt(raw, 10);
-    if (!isFinite(parsed) || parsed < 1) {
+    const parsed = Number(raw);
+    if (!isInteger(parsed) || parsed < 1) {
         reportError(
             "--concurrency must be a positive integer.",
             "validation_error"
@@ -993,20 +1003,16 @@ function resolveIncludeExts(
     manifest: Readonly<ManifestFile>,
     reportError: ErrorReporter
 ): { code: number; ok: false } | { exts: ReadonlySet<string>; ok: true } {
-    const includeFromManifest = toNonEmptyArray(manifest.includeExts);
-    const includeFromFlags = collectListOption(options, "include-ext");
-    let includeEntries: readonly string[] = ["ttf", "otf"];
+    const extensionsFromManifest = toNonEmptyArray(manifest.includeExts);
+    const extensionsFromFlags = collectListOption(options, "include-ext");
+    const extensionEntries = arrayFirst(
+        [extensionsFromFlags, extensionsFromManifest].filter(
+            (entries) => entries.length > 0
+        )
+    ) ?? ["ttf", "otf"];
 
-    if (includeFromManifest.length > 0) {
-        includeEntries = includeFromManifest;
-    }
-
-    if (includeFromFlags.length > 0) {
-        includeEntries = includeFromFlags;
-    }
-
-    const includeExts = normalizeExtList(includeEntries);
-    const unsupportedExts = [...includeExts].filter(
+    const includedExtensions = normalizeExtList(extensionEntries);
+    const unsupportedExts = [...includedExtensions].filter(
         (ext) => ext !== "ttf" && ext !== "otf"
     );
 
@@ -1018,7 +1024,7 @@ function resolveIncludeExts(
         return { code: 1, ok: false };
     }
 
-    return { exts: includeExts, ok: true };
+    return { exts: includedExtensions, ok: true };
 }
 
 // ─── Config builder ───────────────────────────────────────────────────────────
@@ -1031,8 +1037,8 @@ function resolveMaxFiles(
         return { maxFiles: undefined, ok: true };
     }
 
-    const parsedMax = Number.parseInt(maxFilesRaw, 10);
-    if (!isFinite(parsedMax) || parsedMax < 1) {
+    const parsedMax = Number(maxFilesRaw);
+    if (!isInteger(parsedMax) || parsedMax < 1) {
         reportError(
             "--max-files must be a positive integer.",
             "validation_error"
@@ -1078,8 +1084,8 @@ function resolveTimeout(
         return { ok: true, timeout: 60_000 };
     }
 
-    const parsed = Number.parseInt(raw, 10);
-    if (!isFinite(parsed) || parsed < 1) {
+    const parsed = Number(raw);
+    if (!isInteger(parsed) || parsed < 1) {
         reportError(
             "--timeout must be a positive integer (milliseconds).",
             "validation_error"
@@ -1117,7 +1123,7 @@ async function runConverter(
 ): Promise<{ status: number; stderr: string; stdout: string }> {
     return new Promise<{ status: number; stderr: string; stdout: string }>(
         (_resolve) => {
-            execFile(
+            const childProcess = execFile(
                 cmd,
                 [...args],
                 { timeout: timeout ?? 0 },
@@ -1131,6 +1137,13 @@ async function runConverter(
                     }
                 }
             );
+            const stopConverter = (): void => {
+                childProcess.kill();
+            };
+            process.once("exit", stopConverter);
+            childProcess.once("close", () => {
+                process.off("exit", stopConverter);
+            });
         }
     );
 }

@@ -872,3 +872,5 @@ eslint.config.bundled_**
 **/site-docs/developer/api/
 # Local Chrome DevTools automatic workspace metadata (machine-specific absolute path)
 docs/docusaurus/static/.well-known/appspecific/com.chrome.devtools.json
+.lychee.report.md
+.lycheecache
