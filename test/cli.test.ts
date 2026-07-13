@@ -107,30 +107,6 @@ describe("cli main", () => {
         expect(code).toBe(1);
     });
 
-    it("returns 1 for invalid --max-files", async () => {
-        expect.assertions(1);
-
-        vi.spyOn(process.stdout, "write").mockReturnValue(true);
-        vi.spyOn(process.stderr, "write").mockReturnValue(true);
-
-        const root = createFixtureRoot();
-        const sourceDir = nodePath.join(root, "fonts");
-        mkdirSync(sourceDir, { recursive: true });
-
-        try {
-            const code = await main([
-                "--source-dir",
-                sourceDir,
-                "--max-files",
-                "0",
-            ]);
-
-            expect(code).toBe(1);
-        } finally {
-            rmSync(root, { force: true, recursive: true });
-        }
-    });
-
     it("returns 1 when --convert is used without --confirm", async () => {
         expect.assertions(1);
 
@@ -154,7 +130,28 @@ describe("cli main", () => {
         }
     });
 
-    it("returns 1 for invalid --concurrency", async () => {
+    it.each([
+        [
+            "invalid --max-files",
+            "--max-files",
+            "0",
+        ],
+        [
+            "invalid --concurrency",
+            "--concurrency",
+            "0",
+        ],
+        [
+            "invalid --timeout",
+            "--timeout",
+            "abc",
+        ],
+        [
+            "unsupported --include-ext value",
+            "--include-ext",
+            "woff",
+        ],
+    ])("returns 1 for %s", async (_caseName, flag, value) => {
         expect.assertions(1);
 
         vi.spyOn(process.stdout, "write").mockReturnValue(true);
@@ -168,56 +165,8 @@ describe("cli main", () => {
             const code = await main([
                 "--source-dir",
                 sourceDir,
-                "--concurrency",
-                "0",
-            ]);
-
-            expect(code).toBe(1);
-        } finally {
-            rmSync(root, { force: true, recursive: true });
-        }
-    });
-
-    it("returns 1 for invalid --timeout", async () => {
-        expect.assertions(1);
-
-        vi.spyOn(process.stdout, "write").mockReturnValue(true);
-        vi.spyOn(process.stderr, "write").mockReturnValue(true);
-
-        const root = createFixtureRoot();
-        const sourceDir = nodePath.join(root, "fonts");
-        mkdirSync(sourceDir, { recursive: true });
-
-        try {
-            const code = await main([
-                "--source-dir",
-                sourceDir,
-                "--timeout",
-                "abc",
-            ]);
-
-            expect(code).toBe(1);
-        } finally {
-            rmSync(root, { force: true, recursive: true });
-        }
-    });
-
-    it("returns 1 for unsupported --include-ext value", async () => {
-        expect.assertions(1);
-
-        vi.spyOn(process.stdout, "write").mockReturnValue(true);
-        vi.spyOn(process.stderr, "write").mockReturnValue(true);
-
-        const root = createFixtureRoot();
-        const sourceDir = nodePath.join(root, "fonts");
-        mkdirSync(sourceDir, { recursive: true });
-
-        try {
-            const code = await main([
-                "--source-dir",
-                sourceDir,
-                "--include-ext",
-                "woff",
+                flag,
+                value,
             ]);
 
             expect(code).toBe(1);
