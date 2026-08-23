@@ -87,6 +87,24 @@ Package size: **\~86 KB unpacked** (just the CLI binary + compiled JS).
 
 ---
 
+## Maintainer font update workflow
+
+Check the latest stable Nerd Fonts release and produce a non-mutating update plan:
+
+```bash
+npm run fonts:update
+```
+
+The plan reports the current generated ref, target tag, official release archive count, compressed download size, and exact pinned command to apply. After reviewing it:
+
+```bash
+npm run -- fonts:update -- --ref v3.5.1 --convert --confirm
+```
+
+The updater downloads the complete official `.tar.xz` release asset set, validates every archive against Nerd Fonts' `SHA-256.txt`, rejects unsafe archive paths, stages all source and WOFF2 output, verifies counts/signatures/index/provenance, and only then replaces the current asset trees. It does not rely on the incomplete `patched-fonts/` repository checkout. See [CONTRIBUTING.md](./CONTRIBUTING.md#local-asset-pipeline) for the low-level commands and recovery model.
+
+---
+
 ## CLI usage
 
 The CLI converts local TTF/OTF font files into WOFF2 format.

@@ -61,31 +61,60 @@ Asset fetching and conversion are intentionally **local-only** operations. CI do
 | `fonts/woff2/index.json` | Generated asset index                                |
 | `temp/`                  | Scratch space used during conversion (gitignored)    |
 
-### Step 1 — Download Nerd Fonts sources
+### Recommended — plan and apply a complete upstream update
 
 ```bash
-npm run fonts:download
+npm run fonts:update
 ```
 
-Performs a sparse checkout of `ryanoasis/nerd-fonts` and copies `patched-fonts/**` into `fonts/original/**`.
-Default ref is pinned to `v3.4.0` for reproducibility. Override with:
+The default command is read-only. It resolves the latest stable Nerd Fonts release, compares it with committed asset provenance, checks the required tools, and reports the exact release archive count and download size.
+
+After reviewing that plan, pin and apply the exact tag it reported:
 
 ```bash
-npm run fonts:download -- --ref v3.5.0
+npm run -- fonts:update -- --ref v3.5.1 --convert --confirm
 ```
 
-### Step 2 — Convert to WOFF2
+The updater downloads every official `.tar.xz` family asset, validates it against the release's `SHA-256.txt`, rejects unsafe archive paths, extracts into staging, converts into a separate staged WOFF2 tree, verifies counts/signatures/index/provenance, and only then replaces `fonts/original/**` and `fonts/woff2/**`. A failed download, extraction, conversion, or verification leaves the current asset trees in place.
+
+`fonts/woff2/source-metadata.json` is the committed provenance record. Generated index paths are repository-relative so the index remains valid across machines and checkout locations.
+
+Useful plan options:
+
+```bash
+npm run -- fonts:update -- --json
+npm run -- fonts:update -- --ref v3.5.1 --dry-run
+```
+
+### Low-level source download
+
+Use this only when debugging the update pipeline. It requires an explicit release and confirmation because it replaces its destination:
+
+```bash
+npm run -- fonts:download -- --ref v3.5.1 --dry-run
+npm run -- fonts:download -- --ref v3.5.1 --confirm
+```
+
+Custom downloader destinations are restricted to children of `temp/`; this prevents a mistyped debugging path from replacing repository source or configuration directories.
+
+Unlike the old sparse-checkout process, this consumes the complete official release asset set, including families whose binaries are not stored under the upstream repository's `patched-fonts/` tree.
+
+### Low-level WOFF2 conversion
 
 ```bash
 npm run fonts:convert
 ```
 
-Runs the fast in-process bulk converter (`scripts/bulk-convert-fonts.mjs`) using the bundled `ttf2woff2` npm package — **no system tools required**.
-
-Converts all `.ttf` / `.otf` files in `fonts/original/**` and writes `.woff2` output to the mirrored path under `fonts/woff2/**`. Skips already up-to-date files (based on mtime). Use `--force` to re-convert everything.
+This is now a non-mutating plan. Real writes require the repository's standard conversion gates:
 
 ```bash
-npm run fonts:convert -- --force
+npm run -- fonts:convert -- --convert --confirm
+```
+
+Runs the parallel in-process converter using the bundled `ttf2woff2` package. Use the one-shot updater for release refreshes; it forces a clean staged conversion so changed and removed upstream files cannot leave stale output behind.
+
+```bash
+npm run -- fonts:convert -- --force --convert --confirm
 ```
 
 Preview without writing files:
@@ -94,13 +123,13 @@ Preview without writing files:
 npm run fonts:convert:dry-run
 ```
 
-### Step 3 — Verify generated assets
+### Verify generated assets
 
 ```bash
 npm run fonts:verify
 ```
 
-Checks that every expected output file exists and has a valid WOFF2 magic signature (`wOF2`).
+Checks both directions of the source/output mapping, rejects stale outputs, validates every WOFF2 magic signature, checks portable index paths and byte sizes, and validates release provenance when present.
 
 ### One-shot local pipeline
 
@@ -108,7 +137,7 @@ Checks that every expected output file exists and has a valid WOFF2 magic signat
 npm run fonts:local
 ```
 
-Runs: `fonts:setup` → `fonts:download` → `fonts:convert` → `fonts:verify`.
+`fonts:local` is a compatibility alias for the safe `fonts:update` plan. Apply an update only with the explicit `--ref`, `--convert`, and `--confirm` flags shown above.
 
 ### Converter readiness check
 

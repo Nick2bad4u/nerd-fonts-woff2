@@ -21,44 +21,209 @@ import {
     existsSync,
     mkdirSync,
     readdirSync,
+    rmSync,
     statSync,
     writeFileSync,
 } from "node:fs";
 import { cpus } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 
+import {
+    assertPathInsideRepository,
+    isMainModule,
+} from "./nerd-fonts-release.mjs";
+
 const repoRoot = process.cwd();
-const sourceRoot = resolve(repoRoot, "fonts", "original");
-const outputRoot = resolve(repoRoot, "fonts", "woff2");
+/** @type {BulkOptions} */
+let options;
+/** @type {unknown} */
+let optionError;
+try {
+    options = parseBulkOptions(process.argv.slice(2), repoRoot);
+} catch (error) {
+    optionError = error;
+    options = parseBulkOptions(["--dry-run"], repoRoot);
+}
+const sourceRoot = options.sourceDir;
+const outputRoot = options.outputDir;
 const indexFile = resolve(outputRoot, "index.json");
 const workerScript = new URL("./woff2-convert-worker.mjs", import.meta.url);
 
-const dryRun = process.argv.includes("--dry-run");
-const force = process.argv.includes("--force");
-const concurrencyFlag = process.argv.find((arg) =>
-    arg.startsWith("--concurrency=")
-);
-const concurrencyRaw =
-    typeof concurrencyFlag === "string"
-        ? (concurrencyFlag.split("=")[1] ?? "")
-        : "";
+const dryRun = options.dryRun || !options.convert;
+const force = options.force;
 
 /**
  * Maximum parallel conversions. Cap at 8 (32 for user-provided) to avoid
  * excessive memory use.
  */
-const CONCURRENCY = concurrencyFlag
-    ? Math.min(Math.max(Number.parseInt(concurrencyRaw, 10) || 1, 1), 32)
-    : Math.min(cpus().length, 8);
+const CONCURRENCY = options.concurrency ?? Math.min(cpus().length, 8);
 
 /** Kill a worker if a single font takes longer than this. */
-const timeoutFlag = process.argv.find((arg) => arg.startsWith("--timeout="));
-const timeoutRaw =
-    typeof timeoutFlag === "string" ? (timeoutFlag.split("=")[1] ?? "") : "";
-const FONT_TIMEOUT_MS = timeoutFlag
-    ? Math.max(Number.parseInt(timeoutRaw, 10) || 1, 1) * 1000
-    : 60_000;
+const FONT_TIMEOUT_MS = (options.timeoutSeconds ?? 60) * 1000;
+
+/**
+ * @typedef {{
+ *     concurrency: number | null;
+ *     confirm: boolean;
+ *     convert: boolean;
+ *     dryRun: boolean;
+ *     force: boolean;
+ *     outputDir: string;
+ *     prune: boolean;
+ *     publicOutputDir: string;
+ *     publicSourceDir: string;
+ *     sourceDir: string;
+ *     timeoutSeconds: number | null;
+ * }} BulkOptions
+ */
+
+/**
+ * @param {readonly string[]} argumentsList
+ * @param {string} root
+ *
+ * @returns {BulkOptions}
+ */
+export function parseBulkOptions(argumentsList, root = process.cwd()) {
+    /** @type {BulkOptions} */
+    const parsed = {
+        concurrency: null,
+        confirm: false,
+        convert: false,
+        dryRun: false,
+        force: false,
+        outputDir: resolve(root, "fonts", "woff2"),
+        prune: false,
+        publicOutputDir: "fonts/woff2",
+        publicSourceDir: "fonts/original",
+        sourceDir: resolve(root, "fonts", "original"),
+        timeoutSeconds: null,
+    };
+
+    for (let index = 0; index < argumentsList.length; index += 1) {
+        const argument = argumentsList[index];
+        if (
+            argument === "--confirm" ||
+            argument === "--convert" ||
+            argument === "--dry-run" ||
+            argument === "--force" ||
+            argument === "--prune"
+        ) {
+            const key = argument.slice(2).replace("-", "");
+            if (key === "dryrun") parsed.dryRun = true;
+            else if (key === "confirm") parsed.confirm = true;
+            else if (key === "convert") parsed.convert = true;
+            else if (key === "force") parsed.force = true;
+            else parsed.prune = true;
+            continue;
+        }
+
+        const equalsMatch = /^--(concurrency|timeout)=(.+)$/v.exec(
+            argument ?? ""
+        );
+        if (equalsMatch !== null) {
+            const [
+                ,
+                name,
+                value,
+            ] = equalsMatch;
+            if (name === "concurrency") {
+                parsed.concurrency = Number.parseInt(value ?? "", 10);
+            } else {
+                parsed.timeoutSeconds = Number.parseInt(value ?? "", 10);
+            }
+
+            continue;
+        }
+
+        if (
+            argument === "--concurrency" ||
+            argument === "--output-dir" ||
+            argument === "--public-output-dir" ||
+            argument === "--public-source-dir" ||
+            argument === "--source-dir" ||
+            argument === "--timeout"
+        ) {
+            const value = argumentsList[index + 1];
+            if (typeof value !== "string" || value.trim().length === 0) {
+                throw new Error(`${argument} requires a non-empty value.`);
+            }
+
+            if (argument === "--concurrency") {
+                parsed.concurrency = Number.parseInt(value, 10);
+            } else if (argument === "--output-dir") {
+                parsed.outputDir = resolve(root, value);
+            } else if (argument === "--public-output-dir") {
+                parsed.publicOutputDir = normalizePublicPath(value);
+            } else if (argument === "--public-source-dir") {
+                parsed.publicSourceDir = normalizePublicPath(value);
+            } else if (argument === "--source-dir") {
+                parsed.sourceDir = resolve(root, value);
+            } else {
+                parsed.timeoutSeconds = Number.parseInt(value, 10);
+            }
+
+            index += 1;
+            continue;
+        }
+
+        throw new Error(`Unknown option: ${argument}`);
+    }
+
+    if (
+        parsed.concurrency !== null &&
+        (!Number.isInteger(parsed.concurrency) ||
+            parsed.concurrency < 1 ||
+            parsed.concurrency > 32)
+    ) {
+        throw new Error("--concurrency must be an integer from 1 through 32.");
+    }
+
+    if (
+        parsed.timeoutSeconds !== null &&
+        (!Number.isInteger(parsed.timeoutSeconds) || parsed.timeoutSeconds < 1)
+    ) {
+        throw new Error("--timeout must be a positive integer in seconds.");
+    }
+
+    if (parsed.convert && !parsed.confirm && !parsed.dryRun) {
+        throw new Error(
+            "Real conversion requires both --convert and --confirm."
+        );
+    }
+
+    if (parsed.prune && !parsed.convert && !parsed.dryRun) {
+        throw new Error("--prune requires --convert and --confirm.");
+    }
+
+    for (const checkedPath of [parsed.sourceDir, parsed.outputDir]) {
+        assertPathInsideRepository(root, checkedPath);
+    }
+
+    return parsed;
+}
+
+/**
+ * @param {string} value
+ *
+ * @returns {string}
+ */
+function normalizePublicPath(value) {
+    if (
+        isAbsolute(value) ||
+        value.replaceAll("\\", "/").split("/").includes("..")
+    ) {
+        throw new Error(
+            `Public index path must be repository-relative: ${value}`
+        );
+    }
+
+    return value
+        .replaceAll("\\", "/")
+        .replace(/^\.\//v, "")
+        .replace(/\/$/v, "");
+}
 
 /**
  * @typedef {{
@@ -103,6 +268,35 @@ function collectSourceFonts(directory) {
 }
 
 /**
+ * @param {string} directory
+ *
+ * @returns {string[]}
+ */
+function collectOutputFonts(directory) {
+    if (!existsSync(directory)) {
+        return [];
+    }
+
+    /** @type {string[]} */
+    const results = [];
+    const queue = [directory];
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (typeof current !== "string") continue;
+
+        for (const entry of readdirSync(current, { withFileTypes: true })) {
+            const full = join(current, entry.name);
+            if (entry.isDirectory()) queue.push(full);
+            else if (entry.isFile() && /\.woff2$/iv.test(entry.name)) {
+                results.push(full);
+            }
+        }
+    }
+
+    return results.sort((left, right) => left.localeCompare(right));
+}
+
+/**
  * Derive the WOFF2 output path that mirrors the source tree.
  *
  * @param {string} sourcePath
@@ -112,6 +306,20 @@ function collectSourceFonts(directory) {
 function toOutputPath(sourcePath) {
     const rel = relative(sourceRoot, sourcePath);
     return resolve(outputRoot, rel.replace(/\.(?:otf|ttf)$/iu, ".woff2"));
+}
+
+/**
+ * Create a portable repository-relative path for the committed asset index.
+ *
+ * @param {string} root
+ * @param {string} filePath
+ * @param {string} publicRoot
+ *
+ * @returns {string}
+ */
+function toPublicPath(root, filePath, publicRoot) {
+    const relativePath = relative(root, filePath);
+    return `${publicRoot}/${relativePath.split(sep).join("/")}`;
 }
 
 /**
@@ -280,9 +488,17 @@ async function runConversionLoop(sourceFonts) {
                 converted: false,
                 family,
                 fileName,
-                outputPath,
+                outputPath: toPublicPath(
+                    outputRoot,
+                    outputPath,
+                    options.publicOutputDir
+                ),
                 sizeBytes: statSync(outputPath).size,
-                sourcePath,
+                sourcePath: toPublicPath(
+                    sourceRoot,
+                    sourcePath,
+                    options.publicSourceDir
+                ),
             };
             skipped += 1;
             completed += 1;
@@ -296,9 +512,17 @@ async function runConversionLoop(sourceFonts) {
                 converted: false,
                 family,
                 fileName,
-                outputPath,
+                outputPath: toPublicPath(
+                    outputRoot,
+                    outputPath,
+                    options.publicOutputDir
+                ),
                 sizeBytes: null,
-                sourcePath,
+                sourcePath: toPublicPath(
+                    sourceRoot,
+                    sourcePath,
+                    options.publicSourceDir
+                ),
             };
             converted += 1;
             completed += 1;
@@ -313,9 +537,17 @@ async function runConversionLoop(sourceFonts) {
                 converted: true,
                 family,
                 fileName,
-                outputPath,
+                outputPath: toPublicPath(
+                    outputRoot,
+                    outputPath,
+                    options.publicOutputDir
+                ),
                 sizeBytes: result.sizeBytes ?? null,
-                sourcePath,
+                sourcePath: toPublicPath(
+                    sourceRoot,
+                    sourcePath,
+                    options.publicSourceDir
+                ),
             };
             converted += 1;
         } else {
@@ -324,9 +556,17 @@ async function runConversionLoop(sourceFonts) {
                 converted: false,
                 family,
                 fileName,
-                outputPath,
+                outputPath: toPublicPath(
+                    outputRoot,
+                    outputPath,
+                    options.publicOutputDir
+                ),
                 sizeBytes: null,
-                sourcePath,
+                sourcePath: toPublicPath(
+                    sourceRoot,
+                    sourcePath,
+                    options.publicSourceDir
+                ),
             };
             failures.push(`${sourcePath}: ${message}`);
             process.stderr.write(`  [FAIL] ${fileName}: ${message}\n`);
@@ -405,8 +645,26 @@ async function main() {
         throw new Error(`No .ttf or .otf files found under ${sourceRoot}.`);
     }
 
+    const outputOwners = new Map();
+    for (const sourcePath of sourceFonts) {
+        const outputPath = toOutputPath(sourcePath);
+        const existingSource = outputOwners.get(outputPath);
+        if (typeof existingSource === "string") {
+            throw new Error(
+                `Sources map to the same WOFF2 output: ${existingSource} and ${sourcePath}`
+            );
+        }
+
+        outputOwners.set(outputPath, sourcePath);
+    }
+
+    const expectedOutputSet = new Set(outputOwners.keys());
+    const staleOutputs = collectOutputFonts(outputRoot).filter(
+        (outputPath) => !expectedOutputSet.has(outputPath)
+    );
+
     process.stdout.write(
-        `${dryRun ? "[dry-run] " : ""}Converting ${sourceFonts.length} fonts` +
+        `${dryRun ? "[dry-run] Planning" : "Converting"} ${sourceFonts.length} fonts` +
             ` (${CONCURRENCY} parallel workers, ${FONT_TIMEOUT_MS / 1000}s timeout each)...\n`
     );
 
@@ -414,7 +672,14 @@ async function main() {
     const { converted, entries, failed, failures, skipped } =
         await runConversionLoop(sourceFonts);
 
-    if (!dryRun) {
+    if (!dryRun && failed === 0) {
+        if (options.prune) {
+            for (const staleOutput of staleOutputs) {
+                assertPathInsideRepository(repoRoot, staleOutput);
+                rmSync(staleOutput, { force: true });
+            }
+        }
+
         writeIndex(entries);
     }
 
@@ -422,10 +687,14 @@ async function main() {
 
     process.stdout.write(`\nDone in ${durationSec}s.\n`);
     process.stdout.write(
-        `  Converted: ${converted}  Skipped: ${skipped}  Failed: ${failed}\n`
+        `  ${dryRun ? "Would convert" : "Converted"}: ${converted}  Skipped: ${skipped}  Failed: ${failed}\n`
     );
 
-    if (!dryRun) {
+    process.stdout.write(
+        `  Stale outputs: ${staleOutputs.length}${options.prune ? " (prune requested)" : ""}\n`
+    );
+
+    if (!dryRun && failed === 0) {
         process.stdout.write(`  Index:     ${indexFile}\n`);
     }
 
@@ -441,10 +710,23 @@ async function main() {
     }
 }
 
-try {
-    await main();
-} catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Error: ${message}\n`);
-    process.exitCode = 1;
+const moduleFilePath = fileURLToPath(import.meta.url);
+if (isMainModule(process.argv[1], moduleFilePath)) {
+    if (optionError !== undefined) {
+        const message =
+            optionError instanceof Error
+                ? optionError.message
+                : String(optionError);
+        process.stderr.write(`Error: ${message}\n`);
+        process.exitCode = 1;
+    } else {
+        try {
+            await main();
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            process.stderr.write(`Error: ${message}\n`);
+            process.exitCode = 1;
+        }
+    }
 }

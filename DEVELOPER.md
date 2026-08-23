@@ -32,13 +32,13 @@ Asset fetching and conversion are intentionally **local-only** operations. CI do
 | `fonts/woff2/index.json` | Generated asset index                                |
 | `temp/`                  | Scratch space used during conversion (gitignored)    |
 
-### Step 1 — Download Nerd Fonts sources
+### Recommended — plan and apply a complete upstream update
 
 ```bash
-npm run fonts:download
+npm run fonts:update
 ```
 
-Check whether upstream Nerd Fonts has a newer tag than your local downloaded source metadata:
+This is read-only by default. It resolves the latest stable release, checks local provenance and prerequisites, and prints the exact pinned apply command. The lower-level tag check remains available for automation:
 
 ```bash
 npm run fonts:check-upstream
@@ -47,29 +47,38 @@ npm run fonts:check-upstream
 Optional flags for scripting:
 
 ```bash
-npm run fonts:check-upstream -- --json
-npm run fonts:check-upstream -- --fail-on-update
+npm run -- fonts:check-upstream -- --json
+npm run -- fonts:check-upstream -- --fail-on-update
 ```
 
-Performs a sparse checkout of `ryanoasis/nerd-fonts` and copies `patched-fonts/**` into `fonts/original/**`.
-Default ref is pinned to `v3.4.0` for reproducibility. Override with:
+Apply only after reviewing the plan:
 
 ```bash
-npm run fonts:download -- --ref v3.5.0
+npm run -- fonts:update -- --ref v3.5.1 --convert --confirm
 ```
 
-### Step 2 — Convert to WOFF2
+The updater consumes the complete official `.tar.xz` release asset set rather than the incomplete upstream `patched-fonts/` checkout. It validates `SHA-256.txt`, extracts and converts into staging, verifies source/output/index/provenance consistency, and uses rollback-aware promotion for the completed trees. A failed stage does not replace the current assets, concurrent applies are blocked, and the next apply recovers an interrupted promotion before doing new work.
+
+For downloader debugging only:
+
+```bash
+npm run -- fonts:download -- --ref v3.5.1 --dry-run
+npm run -- fonts:download -- --ref v3.5.1 --confirm
+```
+
+Non-default downloader destinations must be children of `temp/`.
+
+### Low-level WOFF2 conversion
 
 ```bash
 npm run fonts:convert
 ```
 
-Runs the fast in-process bulk converter (`scripts/bulk-convert-fonts.mjs`) using the bundled `ttf2woff2` npm package — **no system tools required**.
-
-Converts all `.ttf` / `.otf` files in `fonts/original/**` and writes `.woff2` output to the mirrored path under `fonts/woff2/**`. Skips already up-to-date files (based on mtime). Use `--force` to re-convert everything.
+The default is a non-mutating plan. Real writes require both gates:
 
 ```bash
-npm run fonts:convert -- --force
+npm run -- fonts:convert -- --convert --confirm
+npm run -- fonts:convert -- --force --convert --confirm
 ```
 
 Preview without writing files:
@@ -78,13 +87,13 @@ Preview without writing files:
 npm run fonts:convert:dry-run
 ```
 
-### Step 3 — Verify generated assets
+### Verify generated assets
 
 ```bash
 npm run fonts:verify
 ```
 
-Checks that every expected output file exists and has a valid WOFF2 magic signature (`wOF2`).
+Checks missing and stale files, WOFF2 signatures, portable index paths and sizes, and release provenance when present.
 
 ### One-shot local pipeline
 
@@ -92,7 +101,7 @@ Checks that every expected output file exists and has a valid WOFF2 magic signat
 npm run fonts:local
 ```
 
-Runs: `fonts:setup` → `fonts:download` → `fonts:convert` → `fonts:verify`.
+`fonts:local` is a compatibility alias for the safe `fonts:update` plan.
 
 ### Converter readiness check
 
