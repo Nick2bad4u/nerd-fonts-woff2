@@ -37,8 +37,8 @@ For end-user font usage, see [README.md](./README.md).
 
 ## Requirements
 
-- Node.js `>=22.18.0`
-- npm `>=10`
+- Node.js `>=22.22.3`
+- npm `12.0.2`
 
 ## Install dependencies
 
