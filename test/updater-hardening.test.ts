@@ -167,42 +167,66 @@ describe("nerd Fonts updater hardening", () => {
         const runNpm = (
             scriptArguments: string,
             environment: NodeJS.ProcessEnv = inheritedEnvironment
-        ) =>
-            process.platform === "win32"
-                ? spawnSync(
-                      "pwsh.exe",
-                      [
-                          "-NoLogo",
-                          "-NoProfile",
-                          "-Command",
-                          `npm run -- fonts:update -- ${scriptArguments}; exit $LASTEXITCODE`,
-                      ],
-                      {
-                          cwd: repoRoot,
-                          encoding: "utf8",
-                          env: environment,
-                          stdio: "pipe",
-                      }
-                  )
-                : spawnSync(
-                      "npm",
-                      [
-                          "run",
-                          "--",
-                          "fonts:update",
-                          "--",
-                          ...scriptArguments.split(" "),
-                      ],
-                      {
-                          cwd: repoRoot,
-                          encoding: "utf8",
-                          env: environment,
-                          stdio: "pipe",
-                      }
-                  );
+        ) => {
+            const npmArguments = [
+                "run",
+                "--",
+                "fonts:update",
+                "--",
+                ...scriptArguments.split(" "),
+            ];
+            if (process.platform === "win32") {
+                const npmExecPath = environment["npm_execpath"];
+                if (npmExecPath === undefined) {
+                    throw new Error(
+                        "npm_execpath is required for the PowerShell npm integration test."
+                    );
+                }
+                const npmCliPath = nodePath.resolve(
+                    nodePath.dirname(npmExecPath),
+                    "npm-cli.js"
+                );
+                const childEnvironment = Object.fromEntries(
+                    Object.entries(environment).filter(
+                        ([variableName]) =>
+                            !variableName.toLowerCase().startsWith("npm_")
+                    )
+                );
+                return spawnSync(
+                    "pwsh.exe",
+                    [
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-CommandWithArgs",
+                        "& $env:TEST_NODE_PATH $env:TEST_NPM_CLI_PATH @args; $nativeExitCode = $LASTEXITCODE; exit $nativeExitCode",
+                        ...npmArguments,
+                    ],
+                    {
+                        cwd: repoRoot,
+                        encoding: "utf8",
+                        env: {
+                            ...childEnvironment,
+                            TEST_NODE_PATH: process.execPath,
+                            TEST_NPM_CLI_PATH: npmCliPath,
+                        },
+                        stdio: "pipe",
+                    }
+                );
+            }
+            return spawnSync("npm", npmArguments, {
+                cwd: repoRoot,
+                encoding: "utf8",
+                env: environment,
+                stdio: "pipe",
+            });
+        };
         const result = runNpm("--help");
 
-        expect(result.status).toBe(0);
+        expect(
+            result.status,
+            `npm help failed:\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+        ).toBe(0);
         expect(result.stderr).not.toContain("npm error");
         expect(result.stdout).toContain(
             "Safely update the complete Nerd Fonts"

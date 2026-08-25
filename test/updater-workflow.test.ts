@@ -53,28 +53,51 @@ function runNpm(
     argumentsList: readonly string[],
     environment: NodeJS.ProcessEnv = inheritedEnvironment
 ) {
-    return process.platform === "win32"
-        ? spawnSync(
-              "pwsh.exe",
-              [
-                  "-NoLogo",
-                  "-NoProfile",
-                  "-Command",
-                  `npm ${argumentsList.join(" ")}; exit $LASTEXITCODE`,
-              ],
-              {
-                  cwd: repoRoot,
-                  encoding: "utf8",
-                  env: environment,
-                  stdio: "pipe",
-              }
-          )
-        : spawnSync("npm", argumentsList, {
-              cwd: repoRoot,
-              encoding: "utf8",
-              env: environment,
-              stdio: "pipe",
-          });
+    if (process.platform === "win32") {
+        const npmExecPath = environment["npm_execpath"];
+        if (npmExecPath === undefined) {
+            throw new Error(
+                "npm_execpath is required for the PowerShell npm integration test."
+            );
+        }
+        const npmCliPath = nodePath.resolve(
+            nodePath.dirname(npmExecPath),
+            "npm-cli.js"
+        );
+        const childEnvironment = Object.fromEntries(
+            Object.entries(environment).filter(
+                ([variableName]) =>
+                    !variableName.toLowerCase().startsWith("npm_")
+            )
+        );
+        return spawnSync(
+            "pwsh.exe",
+            [
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-CommandWithArgs",
+                "& $env:TEST_NODE_PATH $env:TEST_NPM_CLI_PATH @args; $nativeExitCode = $LASTEXITCODE; exit $nativeExitCode",
+                ...argumentsList,
+            ],
+            {
+                cwd: repoRoot,
+                encoding: "utf8",
+                env: {
+                    ...childEnvironment,
+                    TEST_NODE_PATH: process.execPath,
+                    TEST_NPM_CLI_PATH: npmCliPath,
+                },
+                stdio: "pipe",
+            }
+        );
+    }
+    return spawnSync("npm", argumentsList, {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: environment,
+        stdio: "pipe",
+    });
 }
 
 describe("reviewed Nerd Fonts update workflow", () => {
@@ -320,7 +343,10 @@ describe("reviewed Nerd Fonts update workflow", () => {
             "--help",
         ]);
 
-        expect(help.status).toBe(0);
+        expect(
+            help.status,
+            `npm guided help failed:\nstdout:\n${help.stdout}\nstderr:\n${help.stderr}`
+        ).toBe(0);
         expect(help.stderr).not.toContain("npm error");
         expect(help.stdout).toContain("npm run fonts:update:guided");
 
