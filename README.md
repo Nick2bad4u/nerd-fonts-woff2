@@ -89,19 +89,60 @@ Package size: **\~86 KB unpacked** (just the CLI binary + compiled JS).
 
 ## Maintainer font update workflow
 
-Check the latest stable Nerd Fonts release and produce a non-mutating update plan:
+For the normal interactive workflow, run one command:
+
+```bash
+npm run fonts:update:guided
+```
+
+The guided workflow checks the live release and prerequisites, saves the complete reviewed identity under `temp/nerd-fonts-update/reviewed-plan.json`, prints the plan and checksum-manifest SHA-256 values, and asks you to type the complete plan fingerprint. Pressing Enter cancels safely. A matching fingerprint invokes the hardened updater with `--apply`, `--confirm`, and the saved fingerprint; apply still revalidates GitHub under the lock and enforces the dirty-tree, downgrade, checksum, transaction, and recovery safeguards.
+
+For a review and apply split across terminals or maintenance windows:
+
+```bash
+npm run -- fonts:update:review -- --ref v3.5.1 --verbose
+npm run -- fonts:update:apply -- --confirm --verbose
+```
+
+The apply command validates that the saved plan file was not edited and then revalidates the entire upstream identity. A saved fingerprint is never treated as permanent authorization. `--plan-file <repository-local-path>` can isolate multiple reviewed plans when needed.
+
+The lower-level updater remains available for automation and troubleshooting. Check the latest stable Nerd Fonts release and produce a non-mutating update plan:
 
 ```bash
 npm run fonts:update
 ```
 
-The plan reports the current generated ref, target tag, official release archive count, compressed download size, and exact pinned command to apply. After reviewing it:
+The plan reports the current generated ref, target tag and commit, exact release/asset IDs and SHA-256 values, compressed download size, and a canonical plan fingerprint. Apply mode re-fetches that identity while holding the repository lock and refuses if any reviewed asset changed. After reviewing the generated command:
 
 ```bash
-npm run -- fonts:update -- --ref v3.5.1 --convert --confirm
+npm run -- fonts:update -- --ref v3.5.1 --apply --confirm --plan-fingerprint <sha256-from-plan>
 ```
 
-The updater downloads the complete official `.tar.xz` release asset set, validates every archive against Nerd Fonts' `SHA-256.txt`, rejects unsafe archive paths, stages all source and WOFF2 output, verifies counts/signatures/index/provenance, and only then replaces the current asset trees. It does not rely on the incomplete `patched-fonts/` repository checkout. See [CONTRIBUTING.md](./CONTRIBUTING.md#local-asset-pipeline) for the low-level commands and recovery model.
+Add `--verbose` to keep a durable stage bar, exact child commands, elapsed timings, and the downloader/converter counters visible during the long-running update:
+
+```bash
+npm run -- fonts:update -- --ref v3.5.1 --apply --confirm --plan-fingerprint <sha256-from-plan> --verbose
+```
+
+Updater stage diagnostics are written to stderr. In `--json` mode, child-process output is streamed to stderr and stdout is exactly one JSON document on both success and failure. During a normal interactive conversion, verbose mode prints the exact repository-relative font path at worker start and completion, a `completed/total` count, percentage, overall bar, active-worker count, detailed phase timings, and output size. ANSI colors are detected automatically for interactive terminals; use `--color` to force them, `--no-color` to disable them, or the standard `NO_COLOR` environment variable to disable automatic color. Progress uses persistent lines rather than cursor-control animation, which keeps PowerShell transcripts and CI logs readable.
+
+Conversions run in a fixed pool of isolated child processes. Each process loads the native `ttf2woff2` module once and then processes fonts sequentially; later jobs report `worker #N reused; module cached`. The first job reports process bootstrap as `worker`, native-module loading as `module`, then every completed job reports `read`, quality-11 WOFF2 `convert`, `write` (including output-directory creation), IPC/runtime `overhead`, and end-to-end `total`; a measurable internal queue wait is reported separately. An ordinary font error does not discard a healthy worker. A timeout, IPC failure, or process crash fails only the affected font, terminates that process, and creates a replacement for later work. Process isolation ensures a native crash or hard hang cannot take down the coordinator.
+
+The updater downloads the complete official `.tar.xz` release asset set, validates every archive against Nerd Fonts' `SHA-256.txt` and GitHub asset digests, rejects unsafe archive and repository paths, stages all source and WOFF2 output, verifies counts/signatures/index/provenance, and only then atomically promotes the assets and README as one journaled transaction. Recovery runs locally before GitHub is contacted. A same-ref apply is a no-op unless `--force-rebuild` is supplied; a newer installed ref supersedes an older request. Dirty changes under `README.md`, `fonts/original`, or `fonts/woff2` are refused unless `--allow-dirty` is explicit. `--convert` remains a deprecated updater alias for `--apply`.
+
+For PowerShell automation, invoke Node directly, save the native exit code before parsing, and keep stderr separate:
+
+```powershell
+$stderrFile = Join-Path ([IO.Path]::GetTempPath()) "nerd-fonts-update.stderr.log"
+$json = & node .\scripts\update-nerd-fonts.mjs --json --ref v3.5.1 2> $stderrFile
+$nativeExitCode = $LASTEXITCODE
+if ($nativeExitCode -ne 0) {
+    throw "Nerd Fonts updater failed with exit code $nativeExitCode. See $stderrFile."
+}
+$plan = $json | ConvertFrom-Json -Depth 32
+```
+
+Updates require a local, non-UNC worktree; staging, transaction backups, and canonical trees must stay on the same volume. An active lock is never broken automatically. `--break-stale-lock` only permits recovery of an old malformed lock after confirming that no updater is running. A post-commit cleanup failure is reported as structured partial success with `committed: true` and is finished by the next apply. See [CONTRIBUTING.md](./CONTRIBUTING.md#local-asset-pipeline) for the low-level commands and recovery model.
 
 ---
 

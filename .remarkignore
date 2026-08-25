@@ -775,6 +775,7 @@ dist-*/
 node_modules/
 coverage/
 .cache/
+temp/
 
 # Binary and media files
 *.png

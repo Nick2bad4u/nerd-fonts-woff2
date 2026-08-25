@@ -34,11 +34,30 @@ Asset fetching and conversion are intentionally **local-only** operations. CI do
 
 ### Recommended — plan and apply a complete upstream update
 
+For a guided plan, review, and apply sequence:
+
+```bash
+npm run fonts:update:guided
+```
+
+The command saves a complete ignored review file under `temp/nerd-fonts-update/`, prints both relevant SHA-256 values, and requires the exact plan fingerprint to be typed before applying. It then delegates to the same locked, fingerprint-revalidating updater used by the low-level command.
+
+For noninteractive or delayed maintenance, split the workflow:
+
+```bash
+npm run -- fonts:update:review -- --ref v3.5.1 --verbose
+npm run -- fonts:update:apply -- --confirm --verbose
+```
+
+The second command validates the saved plan, obtains its target and fingerprint, and revalidates current GitHub metadata before downloading. `--plan-file` accepts only repository-local paths. The default plan file is ignored by Git.
+
+The low-level updater remains read-only by default:
+
 ```bash
 npm run fonts:update
 ```
 
-This is read-only by default. It resolves the latest stable release, checks local provenance and prerequisites, and prints the exact pinned apply command. The lower-level tag check remains available for automation:
+This is read-only by default. It resolves the latest stable release, checks local provenance and prerequisite readiness, fingerprints the release ID, resolved commit, checksum manifest, and selected asset metadata/digests, and prints the exact reviewed apply command. The lower-level tag check remains available for automation:
 
 ```bash
 npm run fonts:check-upstream
@@ -54,10 +73,24 @@ npm run -- fonts:check-upstream -- --fail-on-update
 Apply only after reviewing the plan:
 
 ```bash
-npm run -- fonts:update -- --ref v3.5.1 --convert --confirm
+npm run -- fonts:update -- --ref v3.5.1 --apply --confirm --plan-fingerprint <sha256-from-plan>
 ```
 
-The updater consumes the complete official `.tar.xz` release asset set rather than the incomplete upstream `patched-fonts/` checkout. It validates `SHA-256.txt`, extracts and converts into staging, verifies source/output/index/provenance consistency, and uses rollback-aware promotion for the completed trees. A failed stage does not replace the current assets, concurrent applies are blocked, and the next apply recovers an interrupted promotion before doing new work.
+Add `--verbose` for timestamped stage bars, exact child commands, timings, and archive/font counters:
+
+```bash
+npm run -- fonts:update -- --ref v3.5.1 --apply --confirm --plan-fingerprint <sha256-from-plan> --verbose
+```
+
+Updater stage diagnostics are emitted on stderr. In `--json` mode, child-process output is streamed to stderr and stdout is exactly one machine-readable JSON document on success or failure. During a normal interactive run, the converter reports every exact relative font path at start and completion, `completed/total`, percentage, overall progress, active workers, process/module/read/convert/write/overhead/total timings, and output size. ANSI styling is automatic for interactive terminals; `--color` forces it, while `--no-color` or `NO_COLOR` disables it. Progress uses persistent lines rather than cursor control so logs remain readable when redirected or captured by CI.
+
+The converter uses a fixed process-backed worker pool. Pool processes load the native module once, handle jobs sequentially, and are reused after both successful conversions and ordinary font errors. The coordinator validates every IPC message and retires a process after timeout, IPC failure, malformed result, or crash; later jobs create replacements up to `--concurrency`. A clean shutdown asks idle children to exit, then force-terminates any child that does not respond. The first result from a process includes bootstrap and module-load timings; reused processes report cached initialization. `read`, quality-11 WOFF2 `convert`, `write` (including directory creation), IPC/runtime `overhead`, and end-to-end `total` identify where each font spent time.
+
+The updater consumes the complete official `.tar.xz` release asset set rather than the incomplete upstream `patched-fonts/` checkout. Under the exclusive lock it performs offline recovery first, re-reads canonical metadata and Git status, revalidates the reviewed artifact fingerprint, checks disk/prerequisite capabilities, and only then downloads. It verifies `SHA-256.txt` plus GitHub digests, extracts and converts into staging, verifies source/output/index/provenance consistency, and atomically promotes both trees with README in one journal. Pre-commit failures restore the prior state; post-commit cleanup failures retain a committed journal and report `committed: true` for the next apply to finish.
+
+Apply refuses dirty generated paths by default. `--allow-dirty`, `--force-rebuild`, and `--break-stale-lock` are deliberate recovery/override controls, not routine flags. The update worktree must be local and non-UNC, and all rename targets must stay on one volume. The updater's `--convert` spelling is deprecated; it remains an alias for `--apply` while the low-level converter continues to use `--convert`.
+
+For scripts, invoke `node ./scripts/update-nerd-fonts.mjs --json`, save `$LASTEXITCODE` before `ConvertFrom-Json`, and capture stderr separately. JSON failures use stable category exit codes and preserve child command, exit, signal, phase, and nested rollback errors.
 
 For downloader debugging only:
 
