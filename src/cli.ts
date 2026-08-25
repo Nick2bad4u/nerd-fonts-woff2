@@ -733,7 +733,8 @@ async function loadManifest(
             ok: true,
         };
     } catch (error) {
-        const message = Error.isError(error) ? error.message : String(error);
+        // eslint-disable-next-line unicorn/prefer-error-is-error -- Error.isError is unavailable on the supported Node 22 line
+        const message = error instanceof Error ? error.message : String(error);
         reportError(
             `failed to read --manifest file: ${message}`,
             "validation_error"
