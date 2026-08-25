@@ -151,7 +151,7 @@ describe("nerd Fonts updater hardening", () => {
         };
 
         expect(result.status).toBe(2);
-        expect(result.stderr).not.toContain("npm error");
+        expect(result.stderr).toBe("");
         expect(output.ok).toBe(false);
         expect(output.status).toBe("failed");
         expect(output.error).toMatchObject({
@@ -203,7 +203,7 @@ describe("nerd Fonts updater hardening", () => {
         const result = runNpm("--help");
 
         expect(result.status).toBe(0);
-        expect(result.stderr).toBe("");
+        expect(result.stderr).not.toContain("npm error");
         expect(result.stdout).toContain(
             "Safely update the complete Nerd Fonts"
         );
