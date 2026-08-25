@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 
 /**
  * Verifies that the Node.js WOFF2 converter pipeline is ready to run.
@@ -14,8 +14,7 @@
  */
 
 import { createRequire } from "node:module";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const repoRoot = process.cwd();
@@ -90,8 +89,6 @@ async function runSmokeTest() {
             };
         }
 
-        writeFileSync(join(tmpdir(), `nfw-smoke-${Date.now()}.woff2`), output);
-
         return { ok: true };
     } catch (error) {
         return {
@@ -145,7 +142,7 @@ if (allPassed) {
 
 if (allPassed) {
     process.stdout.write(
-        `\nAll checks passed. Ready to run:\n\n  npm run fonts:local\n\n`
+        `\nAll checks passed. Ready to run:\n\n  npm run fonts:update:guided\n\n`
     );
 } else {
     process.stderr.write(

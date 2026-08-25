@@ -1,14 +1,11 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
     createReadStream,
     existsSync,
     mkdirSync,
     readdirSync,
-    renameSync,
-    rmSync,
     statSync,
     writeFileSync,
 } from "node:fs";
@@ -24,6 +21,13 @@ import {
     resolveUpstreamCommit,
     UPSTREAM_REPO,
 } from "./nerd-fonts-release.mjs";
+import { runCommand } from "./command-runner.mjs";
+import { fetchWithGitHubRetries } from "./release-identity.mjs";
+import {
+    atomicWriteJson,
+    removeTree,
+    renameWithRetry,
+} from "./safe-filesystem.mjs";
 
 const ARCHIVE_SUFFIX = ".tar.xz";
 
@@ -33,9 +37,12 @@ const ARCHIVE_SUFFIX = ".tar.xz";
  *     concurrency: number;
  *     confirmed: boolean;
  *     dryRun: boolean;
+ *     expectedCommitSha: string | null;
  *     families: readonly string[];
  *     help: boolean;
  *     outputDir: string;
+ *     expectedManifestSha256: string | null;
+ *     planFingerprint: string | null;
  *     upstreamRef: string;
  * }} DownloadOptions
  */
@@ -52,6 +59,9 @@ export function parseDownloadOptions(argumentsList, repoRoot = process.cwd()) {
     let confirmed = false;
     let dryRun = false;
     let help = false;
+    let expectedCommitSha = null;
+    let expectedManifestSha256 = null;
+    let planFingerprint = null;
     const defaultOutputDir = resolve(repoRoot, "fonts", "original");
     let outputDir = defaultOutputDir;
     let upstreamRef = "";
@@ -82,8 +92,11 @@ export function parseDownloadOptions(argumentsList, repoRoot = process.cwd()) {
 
         if (
             argument === "--concurrency" ||
+            argument === "--expected-commit-sha" ||
             argument === "--family" ||
+            argument === "--expected-manifest-sha256" ||
             argument === "--output-dir" ||
+            argument === "--plan-fingerprint" ||
             argument === "--ref"
         ) {
             const value = argumentsList[index + 1];
@@ -92,11 +105,23 @@ export function parseDownloadOptions(argumentsList, repoRoot = process.cwd()) {
             }
 
             if (argument === "--concurrency") {
-                concurrency = Number.parseInt(value, 10);
+                if (!/^[1-9]\d*$/v.test(value)) {
+                    throw new Error(
+                        "--concurrency must be an integer from 1 through 8."
+                    );
+                }
+
+                concurrency = Number(value);
+            } else if (argument === "--expected-commit-sha") {
+                expectedCommitSha = value.trim().toLowerCase();
             } else if (argument === "--family") {
                 families.push(value.trim());
+            } else if (argument === "--expected-manifest-sha256") {
+                expectedManifestSha256 = value.trim().toLowerCase();
             } else if (argument === "--output-dir") {
                 outputDir = resolve(repoRoot, value);
+            } else if (argument === "--plan-fingerprint") {
+                planFingerprint = value.trim().toLowerCase();
             } else {
                 upstreamRef = value.trim();
             }
@@ -114,6 +139,26 @@ export function parseDownloadOptions(argumentsList, repoRoot = process.cwd()) {
 
     if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) {
         throw new Error("--concurrency must be an integer from 1 through 8.");
+    }
+
+    if (
+        expectedCommitSha !== null &&
+        !/^[\da-f]{40}$/v.test(expectedCommitSha)
+    ) {
+        throw new Error(
+            "--expected-commit-sha must be a 40-character Git SHA."
+        );
+    }
+
+    if (
+        expectedManifestSha256 !== null &&
+        !/^[\da-f]{64}$/v.test(expectedManifestSha256)
+    ) {
+        throw new Error("--expected-manifest-sha256 must be a SHA-256 digest.");
+    }
+
+    if (planFingerprint !== null && !/^[\da-f]{64}$/v.test(planFingerprint)) {
+        throw new Error("--plan-fingerprint must be a SHA-256 digest.");
     }
 
     if (!dryRun && !help && !confirmed) {
@@ -147,9 +192,12 @@ export function parseDownloadOptions(argumentsList, repoRoot = process.cwd()) {
         concurrency,
         confirmed,
         dryRun,
+        expectedCommitSha,
+        expectedManifestSha256,
         families,
         help,
         outputDir,
+        planFingerprint,
         upstreamRef,
     };
 }
@@ -198,13 +246,10 @@ export function archiveFamilyName(archiveName) {
  * @returns {Promise<Response>}
  */
 async function fetchResponse(url) {
-    const headers = { "User-Agent": "nerd-fonts-woff2-updater" };
-    const response = await fetch(url, { headers, redirect: "follow" });
-    if (!response.ok) {
-        throw new Error(`HTTP ${response.status} while downloading ${url}`);
-    }
-
-    return response;
+    return fetchWithGitHubRetries(url, {
+        authenticated: false,
+        requestTimeoutMs: 10 * 60 * 1_000,
+    });
 }
 
 /**
@@ -247,55 +292,50 @@ async function downloadVerifiedFile(url, destination, expectedSha256) {
     }
 
     const partial = `${destination}.part`;
-    rmSync(partial, { force: true });
+    removeTree(partial);
     const response = await fetchResponse(url);
     writeFileSync(partial, Buffer.from(await response.arrayBuffer()));
     const actualSha256 = await sha256File(partial);
     if (actualSha256 !== expectedSha256) {
-        rmSync(partial, { force: true });
+        removeTree(partial);
         throw new Error(
             `Checksum mismatch for ${basename(destination)}: expected ${expectedSha256}, received ${actualSha256}`
         );
     }
 
-    rmSync(destination, { force: true });
-    renameSync(partial, destination);
+    removeTree(destination);
+    await renameWithRetry(partial, destination);
     return "downloaded";
 }
 
 /**
- * @returns {void}
+ * @param {string} repoRoot
+ *
+ * @returns {Promise<void>}
  */
-function assertTarAvailable() {
-    const result = spawnSync("tar", ["--version"], {
-        encoding: "utf8",
-        stdio: "pipe",
+async function assertTarAvailable(repoRoot) {
+    await runCommand("tar", ["--version"], {
+        absoluteTimeoutMs: 30_000,
+        cwd: repoRoot,
+        mode: "capture",
     });
-    if (result.status !== 0) {
-        throw new Error(
-            "The release updater requires bsdtar/libarchive with .tar.xz support."
-        );
-    }
 }
 
 /**
  * @param {string} archivePath
  * @param {string} destination
+ * @param {string} repoRoot
  *
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function extractArchive(archivePath, destination) {
-    const listResult = spawnSync("tar", ["-tf", archivePath], {
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-        stdio: "pipe",
+async function extractArchive(archivePath, destination, repoRoot) {
+    const listResult = await runCommand("tar", ["-tf", archivePath], {
+        absoluteTimeoutMs: 10 * 60 * 1_000,
+        cwd: repoRoot,
+        inactivityTimeoutMs: 2 * 60 * 1_000,
+        maxTailBytes: 64 * 1024 * 1024,
+        mode: "capture",
     });
-    if (listResult.status !== 0) {
-        const message = listResult.stderr.trim() || listResult.stdout.trim();
-        throw new Error(
-            `Unable to inspect ${basename(archivePath)}: ${message}`
-        );
-    }
 
     const entries = listResult.stdout
         .split(/\r?\n/v)
@@ -310,7 +350,7 @@ function extractArchive(archivePath, destination) {
     }
 
     mkdirSync(destination, { recursive: true });
-    const extractResult = spawnSync(
+    await runCommand(
         "tar",
         [
             "-xf",
@@ -318,15 +358,13 @@ function extractArchive(archivePath, destination) {
             "-C",
             destination,
         ],
-        { encoding: "utf8", stdio: "pipe" }
+        {
+            absoluteTimeoutMs: 10 * 60 * 1_000,
+            cwd: repoRoot,
+            inactivityTimeoutMs: 2 * 60 * 1_000,
+            mode: "capture",
+        }
     );
-    if (extractResult.status !== 0) {
-        const message =
-            extractResult.stderr.trim() || extractResult.stdout.trim();
-        throw new Error(
-            `Unable to extract ${basename(archivePath)}: ${message}`
-        );
-    }
 }
 
 /**
@@ -393,9 +431,14 @@ async function runPool(values, concurrency, worker) {
  * @param {string} destinationDir
  * @param {string} backupDir
  *
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function replaceDirectory(repoRoot, stagingDir, destinationDir, backupDir) {
+async function replaceDirectory(
+    repoRoot,
+    stagingDir,
+    destinationDir,
+    backupDir
+) {
     for (const checkedPath of [
         stagingDir,
         destinationDir,
@@ -405,25 +448,25 @@ function replaceDirectory(repoRoot, stagingDir, destinationDir, backupDir) {
     }
 
     mkdirSync(dirname(destinationDir), { recursive: true });
-    rmSync(backupDir, { force: true, recursive: true });
+    removeTree(backupDir);
     let movedExisting = false;
     try {
         if (existsSync(destinationDir)) {
             mkdirSync(dirname(backupDir), { recursive: true });
-            renameSync(destinationDir, backupDir);
+            await renameWithRetry(destinationDir, backupDir);
             movedExisting = true;
         }
 
-        renameSync(stagingDir, destinationDir);
+        await renameWithRetry(stagingDir, destinationDir);
     } catch (error) {
         if (movedExisting && !existsSync(destinationDir)) {
-            renameSync(backupDir, destinationDir);
+            await renameWithRetry(backupDir, destinationDir);
         }
 
         throw error;
     }
 
-    rmSync(backupDir, { force: true, recursive: true });
+    removeTree(backupDir);
 }
 
 /**
@@ -433,10 +476,10 @@ function printHelp() {
     process.stdout.write(`Download verified Nerd Fonts release assets.\n\n`);
     process.stdout.write(`Usage:\n`);
     process.stdout.write(
-        `  node scripts/download-nerd-fonts-sources.mjs --ref v3.5.1 --dry-run\n`
+        `  node scripts/download-nerd-fonts-sources.mjs --ref <vX.Y.Z> --dry-run\n`
     );
     process.stdout.write(
-        `  node scripts/download-nerd-fonts-sources.mjs --ref v3.5.1 --confirm\n\n`
+        `  node scripts/download-nerd-fonts-sources.mjs --ref <vX.Y.Z> --confirm\n\n`
     );
     process.stdout.write(`Options:\n`);
     process.stdout.write(`  --ref <tag>          Required release tag\n`);
@@ -449,6 +492,15 @@ function printHelp() {
     );
     process.stdout.write(
         `  --concurrency <1-8>  Parallel downloads (default 4)\n`
+    );
+    process.stdout.write(
+        `  --expected-commit-sha <sha>          Refuse a moved reviewed tag\n`
+    );
+    process.stdout.write(
+        `  --expected-manifest-sha256 <sha>  Refuse a changed reviewed manifest\n`
+    );
+    process.stdout.write(
+        `  --plan-fingerprint <sha>           Record reviewed plan provenance\n`
     );
     process.stdout.write(
         `  --dry-run            Inspect the release without writing\n`
@@ -475,9 +527,20 @@ export async function main(
         return;
     }
 
-    assertTarAvailable();
+    await assertTarAvailable(repoRoot);
     const baseUrl = releaseAssetBaseUrl(options.upstreamRef);
     const manifestText = await fetchText(`${baseUrl}/SHA-256.txt`);
+    const manifestSha256 = createHash("sha256")
+        .update(manifestText)
+        .digest("hex");
+    if (
+        options.expectedManifestSha256 !== null &&
+        options.expectedManifestSha256 !== manifestSha256
+    ) {
+        throw new Error(
+            `Checksum manifest changed after review: expected ${options.expectedManifestSha256}, received ${manifestSha256}`
+        );
+    }
     const checksums = parseChecksumManifest(manifestText);
     const allArchives = [...checksums.keys()]
         .filter((name) => name.endsWith(ARCHIVE_SUFFIX))
@@ -499,6 +562,14 @@ export async function main(
                   selectedFamilies.has(archiveFamilyName(archive))
               );
     const commitSha = resolveUpstreamCommit(options.upstreamRef);
+    if (
+        options.expectedCommitSha !== null &&
+        commitSha !== options.expectedCommitSha
+    ) {
+        throw new Error(
+            `Resolved commit changed: expected ${options.expectedCommitSha}, received ${commitSha}.`
+        );
+    }
     const plan = {
         archiveCount: archives.length,
         commitSha,
@@ -550,7 +621,7 @@ export async function main(
     }
 
     mkdirSync(cacheDir, { recursive: true });
-    rmSync(stagingDir, { force: true, recursive: true });
+    removeTree(stagingDir);
     mkdirSync(stagingDir, { recursive: true });
     writeFileSync(join(cacheDir, "SHA-256.txt"), manifestText, "utf8");
 
@@ -581,7 +652,11 @@ export async function main(
     let extractedCount = 0;
     for (const archive of archives) {
         const family = archiveFamilyName(archive);
-        extractArchive(join(cacheDir, archive), join(stagingDir, family));
+        await extractArchive(
+            join(cacheDir, archive),
+            join(stagingDir, family),
+            repoRoot
+        );
         extractedCount += 1;
         if (!options.asJson) {
             process.stdout.write(
@@ -601,17 +676,14 @@ export async function main(
         archiveCount: archives.length,
         commitSha,
         downloadedAt: new Date().toISOString(),
-        manifestSha256: createHash("sha256").update(manifestText).digest("hex"),
+        manifestSha256,
+        planFingerprint: options.planFingerprint,
         sourceCount,
         upstreamRef: options.upstreamRef,
         upstreamRepo: UPSTREAM_REPO,
     };
-    writeFileSync(
-        join(stagingDir, ".source-metadata.json"),
-        `${JSON.stringify(metadata, null, 2)}\n`,
-        "utf8"
-    );
-    replaceDirectory(repoRoot, stagingDir, options.outputDir, backupDir);
+    await atomicWriteJson(join(stagingDir, ".source-metadata.json"), metadata);
+    await replaceDirectory(repoRoot, stagingDir, options.outputDir, backupDir);
 
     const result = {
         ...plan,

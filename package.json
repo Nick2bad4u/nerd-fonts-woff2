@@ -73,6 +73,9 @@
         "fonts:plan": "node ./scripts/bulk-convert-fonts.mjs --dry-run",
         "fonts:setup": "node ./scripts/setup-converter.mjs",
         "fonts:update": "node ./scripts/update-nerd-fonts.mjs",
+        "fonts:update:apply": "node ./scripts/nerd-fonts-update-workflow.mjs apply",
+        "fonts:update:guided": "node ./scripts/nerd-fonts-update-workflow.mjs guided",
+        "fonts:update:review": "node ./scripts/nerd-fonts-update-workflow.mjs review",
         "fonts:verify": "node ./scripts/verify-font-assets.mjs",
         "format": "npx prettier . --write",
         "format:check": "npx prettier . --check",
@@ -139,14 +142,14 @@
         "vitest": "^4.1.10",
         "yamllint-config-nick2bad4u": "^1.1.1"
     },
-    "packageManager": "npm@12.0.1",
+    "packageManager": "npm@12.0.2",
     "engines": {
         "node": ">=22.18.0"
     },
     "devEngines": {
         "packageManager": {
             "name": "npm",
-            "version": ">=10.0.0"
+            "version": "12.0.2"
         },
         "runtime": {
             "name": "node",
@@ -156,5 +159,12 @@
     "publishConfig": {
         "provenance": true,
         "registry": "https://registry.npmjs.org"
+    },
+    "allowScripts": {
+        "core-js@3.49.0": false,
+        "esbuild@0.28.1": true,
+        "fsevents@2.3.3": true,
+        "ttf2woff2@8.0.1": true,
+        "unrs-resolver@1.12.2": true
     }
 }

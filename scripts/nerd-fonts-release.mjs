@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { resolve } from "node:path";
+
+import { assertSafeRepositoryPath } from "./safe-filesystem.mjs";
 
 export const UPSTREAM_REPO = "https://github.com/ryanoasis/nerd-fonts.git";
 export const UPSTREAM_REPOSITORY = "ryanoasis/nerd-fonts";
@@ -69,7 +71,13 @@ export function fetchUpstreamTags() {
             "--tags",
             UPSTREAM_REPO,
         ],
-        { encoding: "utf8", stdio: "pipe" }
+        {
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+            stdio: "pipe",
+            timeout: 30_000,
+            windowsHide: true,
+        }
     );
 
     if (result.status !== 0) {
@@ -117,7 +125,13 @@ export function resolveUpstreamCommit(ref) {
             `refs/tags/${ref}`,
             `refs/tags/${ref}^{}`,
         ],
-        { encoding: "utf8", stdio: "pipe" }
+        {
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+            stdio: "pipe",
+            timeout: 30_000,
+            windowsHide: true,
+        }
     );
 
     if (result.status !== 0) {
@@ -147,6 +161,7 @@ export function resolveUpstreamCommit(ref) {
  *     generatedAt?: string;
  *     manifestSha256?: string;
  *     outputCount?: number;
+ *     planFingerprint?: string | null;
  *     sourceCount?: number;
  *     upstreamRef?: string;
  *     upstreamRepo?: string;
@@ -165,7 +180,22 @@ export function readMetadataFile(filePath) {
 
     try {
         const parsed = JSON.parse(readFileSync(filePath, "utf8"));
-        return typeof parsed === "object" && parsed !== null ? parsed : null;
+        if (typeof parsed !== "object" || parsed === null) return null;
+        for (const key of [
+            "archiveCount",
+            "outputCount",
+            "sourceCount",
+        ]) {
+            const value = Reflect.get(parsed, key);
+            if (
+                value !== undefined &&
+                (!Number.isSafeInteger(value) || Number(value) < 0)
+            ) {
+                return null;
+            }
+        }
+
+        return parsed;
     } catch {
         return null;
     }
@@ -253,19 +283,7 @@ export function parseChecksumManifest(text) {
  * @returns {void}
  */
 export function assertPathInsideRepository(repoRoot, targetPath) {
-    const root = resolve(repoRoot);
-    const target = resolve(targetPath);
-    const relativePath = relative(root, target);
-    const isInside =
-        relativePath.length > 0 &&
-        relativePath !== ".." &&
-        !relativePath.startsWith(`..\\`) &&
-        !relativePath.startsWith("../") &&
-        !isAbsolute(relativePath);
-
-    if (!isInside) {
-        throw new Error(`Refusing path outside repository: ${target}`);
-    }
+    assertSafeRepositoryPath(repoRoot, targetPath);
 }
 
 /**
