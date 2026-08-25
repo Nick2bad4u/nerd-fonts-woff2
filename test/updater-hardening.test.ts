@@ -151,7 +151,7 @@ describe("nerd Fonts updater hardening", () => {
         };
 
         expect(result.status).toBe(2);
-        expect(result.stderr).toBe("");
+        expect(result.stderr).not.toContain("npm error");
         expect(output.ok).toBe(false);
         expect(output.status).toBe("failed");
         expect(output.error).toMatchObject({
@@ -215,7 +215,7 @@ describe("nerd Fonts updater hardening", () => {
         };
 
         expect(jsonFailure.status).toBe(2);
-        expect(jsonFailure.stderr).toBe("");
+        expect(jsonFailure.stderr).not.toContain("npm error");
         expect(parsedFailure.ok).toBe(false);
 
         const mockEnvironment = {

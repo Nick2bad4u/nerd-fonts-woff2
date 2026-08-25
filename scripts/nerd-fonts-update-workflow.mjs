@@ -132,7 +132,13 @@ export function parseWorkflowArguments(argumentsList) {
         );
     }
 
-    const extracted = extractPlanFile(argumentsList.slice(1));
+    const npmLifecycleEvent = process.env["npm_lifecycle_event"];
+    const modeArguments =
+        argumentsList[1] === "--" &&
+        npmLifecycleEvent === `fonts:update:${rawMode}`
+            ? argumentsList.slice(2)
+            : argumentsList.slice(1);
+    const extracted = extractPlanFile(modeArguments);
     const argumentsWithoutTerminator =
         extracted.argumentsList.at(-1) === "--"
             ? extracted.argumentsList.slice(0, -1)

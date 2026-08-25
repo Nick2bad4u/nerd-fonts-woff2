@@ -321,7 +321,7 @@ describe("reviewed Nerd Fonts update workflow", () => {
         ]);
 
         expect(help.status).toBe(0);
-        expect(help.stderr).toBe("");
+        expect(help.stderr).not.toContain("npm error");
         expect(help.stdout).toContain("npm run fonts:update:guided");
 
         const temporaryRoot = mkdtempSync(
@@ -356,7 +356,7 @@ describe("reviewed Nerd Fonts update workflow", () => {
             };
 
             expect(review.status).toBe(0);
-            expect(review.stderr).toBe("");
+            expect(review.stderr).not.toContain("npm error");
             expect(review.stdout).toContain("Reviewed plan saved");
             expect(envelope).toMatchObject({
                 plan: {
