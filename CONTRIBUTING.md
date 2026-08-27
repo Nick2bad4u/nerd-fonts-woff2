@@ -80,6 +80,14 @@ npm run -- fonts:update:apply -- --confirm --verbose
 
 Apply rejects an edited plan file and reacquires the upstream release identity while holding the lock. The saved file supplies convenience, not an integrity bypass. Use `--plan-file <repository-local-path>` only when maintaining more than one reviewed plan.
 
+If a reviewed apply finishes source staging but conversion fails or is interrupted, preserve the completed work and retry only the missing or invalid staged outputs:
+
+```bash
+npm run fonts:update:resume
+```
+
+The resume script supplies `--apply`, `--confirm`, `--failed-only`, and `--verbose` to the saved-plan workflow. The updater validates the saved plan against GitHub under the update lock, requires matching staged source provenance, and never redownloads or clears staging in this mode. Existing outputs are reusable only when they map to an expected source, are not older than that source, contain a complete WOFF2 header, begin with the `wOF2` signature, and have a declared file length equal to their actual size. The complete index and provenance are regenerated, and the full staged verifier must pass before transaction promotion. If no reusable WOFF2 outputs exist, resume refuses instead of silently starting a full conversion.
+
 The underlying updater remains plan-only by default:
 
 ```bash
@@ -102,7 +110,7 @@ npm run -- fonts:update -- --ref v3.5.1 --apply --confirm --plan-fingerprint <sh
 
 Updater stage diagnostics use stderr. In `--json` mode, child output is streamed to stderr and stdout remains exactly one parseable JSON document, including failures. During a normal interactive run, the conversion stage reports every exact relative font path at start and completion, `completed/total`, percentage, overall progress, active workers, process/module/read/convert/write/overhead/total timings, and output size. ANSI styling is automatic on interactive terminals; `--color` forces it, while `--no-color` or `NO_COLOR` disables it. Bars are persistent lines rather than cursor animation and therefore remain useful in CI logs and PowerShell transcripts.
 
-`--concurrency` controls a fixed pool of isolated child processes, not a new process per font. Each process loads the native converter once and reports `worker #N reused; module cached` after its first job. Ordinary font errors leave the process available for later work. A timeout, IPC failure, or crash retires only that process and a subsequent job receives a replacement. The `worker` and `module` phases appear on a process's first result; `read`, quality-11 WOFF2 `convert`, `write` (including directory creation), IPC/runtime `overhead`, and end-to-end `total` are reported for every completed conversion. Queue wait appears when it reaches at least one millisecond.
+`--concurrency` controls a fixed pool of isolated child processes, not a new process per font. The updater defaults to four workers, a 1,200-second per-font limit, and two timeout-only retries. The first retry uses half the configured concurrency (rounded up) and adds 600 seconds; the final retry uses one worker and adds another 600 seconds. `--timeout-retries 0` disables retries, and `2` is the maximum. Non-timeout failures are not retried. Each process loads the native converter once and reports `worker #N reused; module cached` after its first job. Ordinary font errors leave the process available for later work. A timeout, IPC failure, or crash retires only that process and a subsequent job receives a replacement. The `worker` and `module` phases appear on a process's first result; `read`, quality-11 WOFF2 `convert`, `write` (including directory creation), IPC/runtime `overhead`, and end-to-end `total` are reported for every completed conversion. Queue wait appears when it reaches at least one millisecond. Final console failures are capped at 20 entries; the complete machine-readable report is preserved under the ref staging directory as `conversion-failures.json`.
 
 The updater revalidates the reviewed fingerprint under an exclusive owner-checked lock, downloads every official `.tar.xz` family asset, validates it against the release's `SHA-256.txt` and GitHub digests, rejects unsafe archive/reparse paths, extracts into staging, converts into a separate staged WOFF2 tree, and verifies counts/signatures/index/provenance. It then promotes `fonts/original/**`, `fonts/woff2/**`, and `README.md` as one atomically journaled transaction. Pre-commit failures attempt every rollback operation; committed cleanup failures retain recovery state for the next apply.
 
@@ -147,6 +155,14 @@ Runs the parallel process-isolated converter using the bundled `ttf2woff2` packa
 ```bash
 npm run -- fonts:convert -- --force --convert --confirm
 ```
+
+For low-level recovery against a deliberately retained staging tree, `--failed-only` reuses validated outputs and rebuilds the complete index after converting only the remainder. It cannot be combined with `--force`:
+
+```bash
+npm run -- fonts:convert -- --source-dir temp/nerd-fonts-update/v3.5.1/sources --output-dir temp/nerd-fonts-update/v3.5.1/woff2 --failed-only --convert --confirm --verbose
+```
+
+The reviewed `npm run fonts:update:resume` workflow is preferred because it also validates release provenance and performs full verification before promotion.
 
 For the same per-font reporting in a low-level conversion, add `--verbose`; `--color` and `--no-color` control ANSI styling. Always close or allow the command to finish normally so the coordinator can gracefully stop every pooled child process.
 

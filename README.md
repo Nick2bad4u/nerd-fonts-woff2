@@ -106,6 +106,14 @@ npm run -- fonts:update:apply -- --confirm --verbose
 
 The apply command validates that the saved plan file was not edited and then revalidates the entire upstream identity. A saved fingerprint is never treated as permanent authorization. `--plan-file <repository-local-path>` can isolate multiple reviewed plans when needed.
 
+If conversion stops after the reviewed sources were staged, resume only the missing, invalid, or failed outputs with:
+
+```bash
+npm run fonts:update:resume
+```
+
+Resume mode requires the saved reviewed plan and exact matching staged source metadata. It preserves valid staged WOFF2 files, checks their timestamp, complete header, `wOF2` signature, and declared file length, converts only the remainder, rebuilds the complete index, and runs the normal full-catalog verifier before promotion. It refuses to fall back to a full conversion when no reusable outputs are present. A normal apply intentionally clears staging; use the resume command first when retaining completed work matters.
+
 The lower-level updater remains available for automation and troubleshooting. Check the latest stable Nerd Fonts release and produce a non-mutating update plan:
 
 ```bash
@@ -126,7 +134,9 @@ npm run -- fonts:update -- --ref v3.5.1 --apply --confirm --plan-fingerprint <sh
 
 Updater stage diagnostics are written to stderr. In `--json` mode, child-process output is streamed to stderr and stdout is exactly one JSON document on both success and failure. During a normal interactive conversion, verbose mode prints the exact repository-relative font path at worker start and completion, a `completed/total` count, percentage, overall bar, active-worker count, detailed phase timings, and output size. ANSI colors are detected automatically for interactive terminals; use `--color` to force them, `--no-color` to disable them, or the standard `NO_COLOR` environment variable to disable automatic color. Progress uses persistent lines rather than cursor-control animation, which keeps PowerShell transcripts and CI logs readable.
 
-Conversions run in a fixed pool of isolated child processes. Each process loads the native `ttf2woff2` module once and then processes fonts sequentially; later jobs report `worker #N reused; module cached`. The first job reports process bootstrap as `worker`, native-module loading as `module`, then every completed job reports `read`, quality-11 WOFF2 `convert`, `write` (including output-directory creation), IPC/runtime `overhead`, and end-to-end `total`; a measurable internal queue wait is reported separately. An ordinary font error does not discard a healthy worker. A timeout, IPC failure, or process crash fails only the affected font, terminates that process, and creates a replacement for later work. Process isolation ensures a native crash or hard hang cannot take down the coordinator.
+Conversions run in a fixed pool of isolated child processes. The updater defaults to four workers and a 1,200-second per-font timeout. Each process loads the native `ttf2woff2` module once and then processes fonts sequentially; later jobs report `worker #N reused; module cached`. The first job reports process bootstrap as `worker`, native-module loading as `module`, then every completed job reports `read`, quality-11 WOFF2 `convert`, `write` (including output-directory creation), IPC/runtime `overhead`, and end-to-end `total`; a measurable internal queue wait is reported separately. An ordinary font error does not discard a healthy worker. A timeout, IPC failure, or process crash fails only the affected font, terminates that process, and creates a replacement for later work. Process isolation ensures a native crash or hard hang cannot take down the coordinator.
+
+Only timeouts receive automatic retry passes. With the defaults, the updater retries timed-out fonts with two workers and a 1,800-second limit, then one worker and a 2,400-second limit. `--timeout-retries 0` disables these passes; the maximum is two. Ordinary conversion errors remain final immediately. Console failure details are capped, while every final failure is retained in `temp/nerd-fonts-update/<ref>/conversion-failures.json` for diagnosis and the next resume attempt.
 
 The updater downloads the complete official `.tar.xz` release asset set, validates every archive against Nerd Fonts' `SHA-256.txt` and GitHub asset digests, rejects unsafe archive and repository paths, stages all source and WOFF2 output, verifies counts/signatures/index/provenance, and only then atomically promotes the assets and README as one journaled transaction. Recovery runs locally before GitHub is contacted. A same-ref apply is a no-op unless `--force-rebuild` is supplied; a newer installed ref supersedes an older request. Dirty changes under `README.md`, `fonts/original`, or `fonts/woff2` are refused unless `--allow-dirty` is explicit. `--convert` remains a deprecated updater alias for `--apply`.
 
