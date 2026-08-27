@@ -309,12 +309,16 @@ export class FontConversionProcessPool {
         job.workerReused = worker.jobsCompleted > 0;
         worker.currentJob = job;
         job.timer = setTimeout(() => {
+            const suggestedTimeoutSeconds = Math.min(
+                86_400,
+                Math.ceil(this.#timeoutMs / 1000) + 600
+            );
             this.#retireWorker(
                 worker,
                 [
                     `timed out after ${this.#timeoutMs / 1000}s`,
                     `source: ${job.sourcePath}`,
-                    "Try raising --timeout=<seconds> (e.g. --timeout=240) and/or reducing --concurrency.",
+                    `Try --timeout=${suggestedTimeoutSeconds} and/or a lower --concurrency value.`,
                 ].join(". "),
                 true
             );

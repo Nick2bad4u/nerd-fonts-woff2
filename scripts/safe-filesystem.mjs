@@ -86,15 +86,16 @@ export async function renameWithRetry(source, destination, options = {}) {
  *
  * @param {string} filePath
  * @param {string | NodeJS.ArrayBufferView} contents
+ * @param {{ mode?: number }} [options]
  *
  * @returns {Promise<void>}
  */
-export async function atomicWriteFile(filePath, contents) {
+export async function atomicWriteFile(filePath, contents, options = {}) {
     mkdirSync(dirname(filePath), { recursive: true });
     const temporaryFile = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
     let descriptor;
     try {
-        descriptor = openSync(temporaryFile, "wx", 0o600);
+        descriptor = openSync(temporaryFile, "wx", options.mode ?? 0o600);
         writeFileSync(descriptor, contents);
         fsyncSync(descriptor);
         closeSync(descriptor);

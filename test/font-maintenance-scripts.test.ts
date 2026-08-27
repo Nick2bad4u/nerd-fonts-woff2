@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
 import * as nodePath from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -15,6 +21,9 @@ const bulkConverterModuleUrl = pathToFileURL(
 ).href;
 const conversionPoolModuleUrl = pathToFileURL(
     nodePath.resolve(repoRoot, "scripts", "font-conversion-process-pool.mjs")
+).href;
+const conversionPolicyModuleUrl = pathToFileURL(
+    nodePath.resolve(repoRoot, "scripts", "font-conversion-policy.mjs")
 ).href;
 const mockConversionWorkerUrl = pathToFileURL(
     nodePath.resolve(
@@ -66,7 +75,7 @@ function runScript(
 
 describe("font maintenance script safety", () => {
     it("documents the safe update plan and explicit apply gates", () => {
-        expect.assertions(6);
+        expect.assertions(8);
 
         const result = runScript("update-nerd-fonts.mjs", [
             "--verbose",
@@ -79,6 +88,8 @@ describe("font maintenance script safety", () => {
         expect(result.stdout).toContain("--apply --confirm");
         expect(result.stdout).toContain("--verbose");
         expect(result.stdout).toContain("--color / --no-color");
+        expect(result.stdout).toContain("--failed-only");
+        expect(result.stdout).toContain("--timeout-retries");
     });
 
     it("renders persistent stage progress with details and timing", () => {
@@ -210,6 +221,251 @@ describe("font maintenance script safety", () => {
             "requires both --convert and --confirm"
         );
     });
+
+    it("uses conservative defaults and retries only timed-out fonts", () => {
+        expect.assertions(8);
+
+        const result = runInlineModule(`
+            import {
+                calculateConversionDeadlineMs,
+                createConversionPasses,
+                isFontTimeoutMessage,
+                partitionConversionFailures,
+            } from ${JSON.stringify(conversionPolicyModuleUrl)};
+            import { parseBulkOptions } from ${JSON.stringify(bulkConverterModuleUrl)};
+            const options = parseBulkOptions([
+                "--convert",
+                "--confirm",
+                "--failed-only",
+            ]);
+            const passes = createConversionPasses(
+                options.concurrency,
+                options.timeoutSeconds,
+                options.timeoutRetries,
+            );
+            const partitioned = partitionConversionFailures([
+                { sourcePath: "timed-out.ttf", timedOut: true },
+                { sourcePath: "invalid.ttf", timedOut: false },
+            ], true);
+            const finalPartition = partitionConversionFailures([
+                { sourcePath: "still-timed-out.ttf", timedOut: true },
+            ], false);
+            const invalid = [
+                ["--timeout-retries=3"],
+                ["--timeout-retries=00"],
+                ["--timeout=240seconds"],
+                ["--failed-only", "--convert", "--confirm", "--force"],
+            ].map((argumentsList) => {
+                try {
+                    parseBulkOptions(argumentsList);
+                    return null;
+                } catch (error) {
+                    return error.message;
+                }
+            });
+            process.stdout.write(JSON.stringify({
+                deadline: calculateConversionDeadlineMs(2_252, passes),
+                finalPartition,
+                invalid,
+                options,
+                partitioned,
+                passes,
+                timeoutDetected: isFontTimeoutMessage("timed out after 240s. source: Example.ttf"),
+            }));
+        `);
+        const output = JSON.parse(result.stdout) as {
+            deadline: number;
+            finalPartition: {
+                finalFailures: Array<{ sourcePath: string }>;
+                retrySources: string[];
+            };
+            invalid: Array<null | string>;
+            options: {
+                concurrency: number;
+                failedOnly: boolean;
+                timeoutRetries: number;
+                timeoutSeconds: number;
+            };
+            partitioned: {
+                finalFailures: Array<{ sourcePath: string }>;
+                retrySources: string[];
+            };
+            passes: Array<{
+                concurrency: number;
+                number: number;
+                timeoutSeconds: number;
+            }>;
+            timeoutDetected: boolean;
+        };
+
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(output.options).toMatchObject({
+            concurrency: 4,
+            failedOnly: true,
+            timeoutRetries: 2,
+            timeoutSeconds: 1200,
+        });
+        expect(output.passes).toStrictEqual([
+            { concurrency: 4, number: 1, timeoutSeconds: 1200 },
+            { concurrency: 2, number: 2, timeoutSeconds: 1800 },
+            { concurrency: 1, number: 3, timeoutSeconds: 2400 },
+        ]);
+        expect(output.partitioned).toStrictEqual({
+            finalFailures: [{ sourcePath: "invalid.ttf", timedOut: false }],
+            retrySources: ["timed-out.ttf"],
+        });
+        expect(output.finalPartition).toStrictEqual({
+            finalFailures: [
+                { sourcePath: "still-timed-out.ttf", timedOut: true },
+            ],
+            retrySources: [],
+        });
+        expect(output.invalid).toStrictEqual(
+            expect.arrayContaining([
+                expect.stringContaining("integer from 0 through 2"),
+                expect.stringContaining("integer from 1 through 86400"),
+                expect.stringContaining("cannot be combined"),
+            ])
+        );
+        expect(output.timeoutDetected && output.deadline > 2_147_483_647).toBe(
+            true
+        );
+    });
+
+    it("reuses only complete, current WOFF2 staging outputs", () => {
+        expect.assertions(3);
+
+        const result = runInlineModule(`
+            import {
+                mkdtempSync,
+                mkdirSync,
+                rmSync,
+                utimesSync,
+                writeFileSync,
+            } from "node:fs";
+            import { resolve } from "node:path";
+            import { isReusableOutput } from ${JSON.stringify(bulkConverterModuleUrl)};
+            const fixtureRoot = mkdtempSync(resolve(${JSON.stringify(repoRoot)}, "temp", "font-resume-"));
+            const source = resolve(fixtureRoot, "sources", "Font.ttf");
+            const output = resolve(fixtureRoot, "outputs", "Font.woff2");
+            mkdirSync(resolve(fixtureRoot, "sources"), { recursive: true });
+            mkdirSync(resolve(fixtureRoot, "outputs"), { recursive: true });
+            try {
+                writeFileSync(source, "source");
+                const validWoff2 = Buffer.alloc(48);
+                validWoff2.write("wOF2", 0, "ascii");
+                validWoff2.writeUInt32BE(validWoff2.length, 8);
+                writeFileSync(output, validWoff2);
+                const valid = isReusableOutput(output, source);
+                const invalidWoff2 = Buffer.from(validWoff2);
+                invalidWoff2.write("bad!", 0, "ascii");
+                writeFileSync(output, invalidWoff2);
+                const badSignature = isReusableOutput(output, source);
+                const invalidLengthWoff2 = Buffer.from(validWoff2);
+                invalidLengthWoff2.writeUInt32BE(validWoff2.length + 1, 8);
+                writeFileSync(output, invalidLengthWoff2);
+                const badLength = isReusableOutput(output, source);
+                writeFileSync(output, validWoff2);
+                const old = new Date(Date.now() - 60_000);
+                const newer = new Date();
+                utimesSync(output, old, old);
+                utimesSync(source, newer, newer);
+                const stale = isReusableOutput(output, source);
+                process.stdout.write(JSON.stringify({ badLength, badSignature, stale, valid }));
+            } finally {
+                rmSync(fixtureRoot, { force: true, recursive: true });
+            }
+        `);
+        const output = JSON.parse(result.stdout) as {
+            badLength: boolean;
+            badSignature: boolean;
+            stale: boolean;
+            valid: boolean;
+        };
+
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(output).toStrictEqual({
+            badLength: false,
+            badSignature: false,
+            stale: false,
+            valid: true,
+        });
+    });
+
+    it("failed-only conversion preserves reusable output and reports the remainder", () => {
+        expect.assertions(9);
+
+        const fixtureRoot = mkdtempSync(
+            nodePath.resolve(repoRoot, "temp", "font-failed-only-")
+        );
+        const sourceRoot = nodePath.resolve(fixtureRoot, "sources", "Family");
+        const outputRoot = nodePath.resolve(fixtureRoot, "outputs");
+        const reusableOutput = nodePath.resolve(
+            outputRoot,
+            "Family",
+            "Keep.woff2"
+        );
+        const failureReport = nodePath.resolve(fixtureRoot, "failures.json");
+        mkdirSync(sourceRoot, { recursive: true });
+        mkdirSync(nodePath.dirname(reusableOutput), { recursive: true });
+        writeFileSync(nodePath.resolve(sourceRoot, "Fail.ttf"), "invalid");
+        writeFileSync(nodePath.resolve(sourceRoot, "Keep.ttf"), "source");
+        const reusableContents = Buffer.alloc(48);
+        reusableContents.write("wOF2", 0, "ascii");
+        reusableContents.writeUInt32BE(reusableContents.length, 8);
+        writeFileSync(reusableOutput, reusableContents);
+
+        try {
+            const result = runScript("bulk-convert-fonts.mjs", [
+                "--source-dir",
+                nodePath.resolve(fixtureRoot, "sources"),
+                "--output-dir",
+                outputRoot,
+                "--failure-report",
+                failureReport,
+                "--concurrency",
+                "1",
+                "--timeout-retries",
+                "0",
+                "--failed-only",
+                "--convert",
+                "--confirm",
+                "--no-color",
+            ]);
+            const report = JSON.parse(readFileSync(failureReport, "utf8")) as {
+                failedOnly: boolean;
+                failures: Array<{
+                    sourcePath: string;
+                    timedOut: boolean;
+                }>;
+                schemaVersion: number;
+            };
+
+            expect(result.status).toBe(1);
+            expect(result.stdout).toContain("Resuming 1 of 2 fonts");
+            expect(result.stdout).toContain(
+                "Reusing 1 validated WOFF2 outputs"
+            );
+            expect(result.stderr).toContain("Full failure report:");
+            expect(report).toMatchObject({
+                failedOnly: true,
+                schemaVersion: 1,
+            });
+            expect(report.failures).toHaveLength(1);
+            expect(report.failures[0]).toMatchObject({
+                sourcePath: "Family/Fail.ttf",
+                timedOut: false,
+            });
+            expect(readFileSync(reusableOutput)).toStrictEqual(
+                reusableContents
+            );
+            expect(result.stdout).not.toContain("START Family/Keep.ttf");
+        } finally {
+            rmSync(fixtureRoot, { force: true, recursive: true });
+        }
+    }, 15_000);
 
     it("rejects source files that map to one WOFF2 output", () => {
         expect.assertions(3);
@@ -489,7 +745,9 @@ describe("font maintenance script safety", () => {
         expect(result.status).toBe(0);
         expect(result.stderr).toBe("");
         expect(output.timedOut.ok).toBe(false);
-        expect(output.timedOut.error).toContain("timed out after 0.5s");
+        expect(output.timedOut.error).toMatch(
+            /timed out after 0\.5s.+Try --timeout=601/v
+        );
         expect(output.timedOut.timings.totalMs).toBeGreaterThanOrEqual(400);
         expect(output.afterTimeout.ok).toBe(true);
         expect(output.afterTimeout.timings.workerId).not.toBe(

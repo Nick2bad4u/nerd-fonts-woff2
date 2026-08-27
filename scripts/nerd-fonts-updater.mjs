@@ -10,7 +10,6 @@ import {
     statSync,
     writeFileSync,
 } from "node:fs";
-import { availableParallelism } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -19,6 +18,14 @@ import {
     formatCommand,
     runCommand,
 } from "./command-runner.mjs";
+import {
+    DEFAULT_CONVERSION_CONCURRENCY,
+    DEFAULT_FONT_TIMEOUT_SECONDS,
+    DEFAULT_TIMEOUT_RETRIES,
+    MAX_TIMEOUT_RETRIES,
+    calculateConversionDeadlineMs,
+    createConversionPasses,
+} from "./font-conversion-policy.mjs";
 import {
     compareSemverTags,
     parseSemverTag,
@@ -69,13 +76,15 @@ const GENERATED_PATHS = [
  *     breakStaleLock: boolean;
  *     color: boolean | null;
  *     confirm: boolean;
- *     conversionConcurrency: number | null;
+ *     conversionConcurrency: number;
  *     downloadConcurrency: number;
  *     dryRun: boolean;
+ *     failedOnly: boolean;
  *     forceRebuild: boolean;
  *     help: boolean;
  *     planFingerprint: string | null;
  *     timeoutSeconds: number;
+ *     timeoutRetries: number;
  *     upstreamRef: string | null;
  *     verbose: boolean;
  * }} UpdateOptions
@@ -97,7 +106,8 @@ const GENERATED_PATHS = [
  * @param {number} maximum
  */
 function parseIntegerOption(value, optionName, minimum, maximum) {
-    if (!/^[1-9]\d*$/v.test(value)) {
+    const integerPattern = minimum === 0 ? /^(?:0|[1-9]\d*)$/v : /^[1-9]\d*$/v;
+    if (!integerPattern.test(value)) {
         throw new Error(
             `${optionName} must be an integer from ${minimum} through ${maximum}.`
         );
@@ -128,13 +138,15 @@ export function parseUpdateOptions(argumentsList) {
         breakStaleLock: false,
         color: null,
         confirm: false,
-        conversionConcurrency: null,
+        conversionConcurrency: DEFAULT_CONVERSION_CONCURRENCY,
         downloadConcurrency: 4,
         dryRun: false,
+        failedOnly: false,
         forceRebuild: false,
         help: false,
         planFingerprint: null,
-        timeoutSeconds: 240,
+        timeoutRetries: DEFAULT_TIMEOUT_RETRIES,
+        timeoutSeconds: DEFAULT_FONT_TIMEOUT_SECONDS,
         upstreamRef: null,
         verbose: false,
     };
@@ -147,6 +159,7 @@ export function parseUpdateOptions(argumentsList) {
         "--confirm",
         "--convert",
         "--dry-run",
+        "--failed-only",
         "--force-rebuild",
         "--help",
         "--json",
@@ -160,6 +173,7 @@ export function parseUpdateOptions(argumentsList) {
         "--plan-fingerprint",
         "--ref",
         "--timeout",
+        "--timeout-retries",
     ]);
 
     for (let index = 0; index < argumentsList.length; index += 1) {
@@ -225,6 +239,10 @@ export function parseUpdateOptions(argumentsList) {
             parsed.forceRebuild = true;
             continue;
         }
+        if (argument === "--failed-only") {
+            parsed.failedOnly = true;
+            continue;
+        }
         if (argument === "--help" || argument === "-h") {
             parsed.help = true;
             continue;
@@ -279,6 +297,13 @@ export function parseUpdateOptions(argumentsList) {
             parsed.planFingerprint = value.toLowerCase();
         } else if (argument === "--ref") {
             parsed.upstreamRef = value;
+        } else if (argument === "--timeout-retries") {
+            parsed.timeoutRetries = parseIntegerOption(
+                value,
+                argument,
+                0,
+                MAX_TIMEOUT_RETRIES
+            );
         } else {
             parsed.timeoutSeconds = parseIntegerOption(
                 value,
@@ -317,6 +342,14 @@ export function parseUpdateOptions(argumentsList) {
     }
     if (parsed.forceRebuild && !parsed.apply) {
         throw new Error("--force-rebuild requires --apply.");
+    }
+    if (parsed.failedOnly && !parsed.apply) {
+        throw new Error("--failed-only requires --apply.");
+    }
+    if (parsed.failedOnly && parsed.forceRebuild) {
+        throw new Error(
+            "--failed-only and --force-rebuild cannot be combined."
+        );
     }
     if (parsed.breakStaleLock && !parsed.apply) {
         throw new Error("--break-stale-lock requires --apply.");
@@ -861,6 +894,8 @@ function printHelp() {
     process.stdout.write(
         "  npm run -- fonts:update -- --ref <vX.Y.Z> --apply --confirm --plan-fingerprint <sha256>\n\n"
     );
+    process.stdout.write("Resume a failed reviewed conversion:\n");
+    process.stdout.write("  npm run fonts:update:resume\n\n");
     process.stdout.write("Options:\n");
     process.stdout.write(
         "  --ref <tag>                 Target tag (default latest)\n"
@@ -890,10 +925,16 @@ function printHelp() {
         "  --download-concurrency <n>  1-8 downloads (default 4)\n"
     );
     process.stdout.write(
-        "  --concurrency <n>           1-32 conversion workers\n"
+        `  --concurrency <n>           1-32 conversion workers (default ${DEFAULT_CONVERSION_CONCURRENCY})\n`
     );
     process.stdout.write(
-        "  --timeout <seconds>         Per-font timeout (default 240)\n"
+        `  --timeout <seconds>         Per-font timeout (default ${DEFAULT_FONT_TIMEOUT_SECONDS})\n`
+    );
+    process.stdout.write(
+        `  --timeout-retries <n>       0-${MAX_TIMEOUT_RETRIES} lower-concurrency timeout retries (default ${DEFAULT_TIMEOUT_RETRIES})\n`
+    );
+    process.stdout.write(
+        "  --failed-only               Reuse validated staging and redo missing/failed fonts\n"
     );
     process.stdout.write(
         "  --json                      Emit exactly one JSON result\n"
@@ -1198,48 +1239,74 @@ async function applyUpdate(options, repoRoot, progress) {
         }
         const childMode = options.asJson ? "json" : "interactive";
 
-        await runProgressStage(
-            progress,
-            `Download and extract ${release.archiveCount} reviewed archives`,
-            async () => {
-                removeTree(stagingSources);
-                removeTree(stagingOutputs);
-                try {
-                    await runTrackedCommand(
-                        progress,
-                        process.execPath,
-                        [
-                            resolve(
-                                moduleDirectory,
-                                "download-nerd-fonts-sources.mjs"
+        if (options.failedOnly) {
+            await runProgressStage(
+                progress,
+                "Validate the resumable staged catalog",
+                async () => {
+                    if (
+                        !existsSync(stagingSources) ||
+                        !statSync(stagingSources).isDirectory() ||
+                        !existsSync(stagingOutputs) ||
+                        !statSync(stagingOutputs).isDirectory()
+                    ) {
+                        throw categorize(
+                            new Error(
+                                `No resumable staging exists for ${targetRef}. Run a normal reviewed apply first.`
                             ),
-                            "--ref",
-                            targetRef,
-                            "--output-dir",
-                            stagingSources,
-                            "--concurrency",
-                            String(options.downloadConcurrency),
-                            "--expected-commit-sha",
-                            release.identity.commitSha,
-                            "--expected-manifest-sha256",
-                            release.identity.checksumManifest.manifestSha256,
-                            "--plan-fingerprint",
-                            release.planFingerprint,
-                            "--confirm",
-                        ],
-                        repoRoot,
-                        childMode,
-                        {
-                            absoluteTimeoutMs: 2 * 60 * 60 * 1_000,
-                            inactivityTimeoutMs: 10 * 60 * 1_000,
-                        }
-                    );
-                } catch (error) {
-                    throw categorize(error, "conversion", 6, "download");
-                }
-            },
-            `Prepared ${release.archiveCount} release archives in staging`
-        );
+                            "repository-state",
+                            3,
+                            "staging-resume"
+                        );
+                    }
+                },
+                `Found resumable sources and WOFF2 outputs for ${targetRef}`
+            );
+        } else {
+            await runProgressStage(
+                progress,
+                `Download and extract ${release.archiveCount} reviewed archives`,
+                async () => {
+                    removeTree(stagingSources);
+                    removeTree(stagingOutputs);
+                    try {
+                        await runTrackedCommand(
+                            progress,
+                            process.execPath,
+                            [
+                                resolve(
+                                    moduleDirectory,
+                                    "download-nerd-fonts-sources.mjs"
+                                ),
+                                "--ref",
+                                targetRef,
+                                "--output-dir",
+                                stagingSources,
+                                "--concurrency",
+                                String(options.downloadConcurrency),
+                                "--expected-commit-sha",
+                                release.identity.commitSha,
+                                "--expected-manifest-sha256",
+                                release.identity.checksumManifest
+                                    .manifestSha256,
+                                "--plan-fingerprint",
+                                release.planFingerprint,
+                                "--confirm",
+                            ],
+                            repoRoot,
+                            childMode,
+                            {
+                                absoluteTimeoutMs: 2 * 60 * 60 * 1_000,
+                                inactivityTimeoutMs: 10 * 60 * 1_000,
+                            }
+                        );
+                    } catch (error) {
+                        throw categorize(error, "conversion", 6, "download");
+                    }
+                },
+                `Prepared ${release.archiveCount} release archives in staging`
+            );
+        }
 
         const sourceMetadata = readMetadataFile(
             resolve(stagingSources, ".source-metadata.json")
@@ -1267,9 +1334,15 @@ async function applyUpdate(options, repoRoot, progress) {
         const sourceCount = Number(sourceMetadata.sourceCount);
         await runProgressStage(
             progress,
-            "Convert the staged source catalog to WOFF2",
+            options.failedOnly
+                ? "Redo failed or missing staged WOFF2 conversions"
+                : "Convert the staged source catalog to WOFF2",
             async () => {
-                removeTree(stagingOutputs);
+                if (!options.failedOnly) removeTree(stagingOutputs);
+                const failureReport = resolve(
+                    updateRoot,
+                    "conversion-failures.json"
+                );
                 const convertArguments = [
                     resolve(moduleDirectory, "bulk-convert-fonts.mjs"),
                     "--source-dir",
@@ -1282,28 +1355,34 @@ async function applyUpdate(options, repoRoot, progress) {
                     "fonts/woff2",
                     "--timeout",
                     String(options.timeoutSeconds),
-                    "--force",
+                    "--timeout-retries",
+                    String(options.timeoutRetries),
+                    "--concurrency",
+                    String(options.conversionConcurrency),
+                    "--failure-report",
+                    failureReport,
                     "--convert",
                     "--confirm",
                 ];
-                if (options.conversionConcurrency !== null) {
-                    convertArguments.push(
-                        "--concurrency",
-                        String(options.conversionConcurrency)
-                    );
-                }
+                convertArguments.push(
+                    options.failedOnly ? "--failed-only" : "--force"
+                );
                 if (options.verbose) convertArguments.push("--verbose");
                 if (options.color === true) convertArguments.push("--color");
                 else if (options.color === false)
                     convertArguments.push("--no-color");
-                const concurrency =
-                    options.conversionConcurrency ??
-                    Math.max(1, Math.min(availableParallelism(), 4));
-                const absoluteTimeoutMs =
-                    Math.ceil(sourceCount / concurrency) *
-                        options.timeoutSeconds *
-                        1_000 +
-                    15 * 60 * 1_000;
+                const conversionPasses = createConversionPasses(
+                    options.conversionConcurrency,
+                    options.timeoutSeconds,
+                    options.timeoutRetries
+                );
+                const absoluteTimeoutMs = calculateConversionDeadlineMs(
+                    sourceCount,
+                    conversionPasses
+                );
+                const finalPassTimeoutSeconds =
+                    conversionPasses.at(-1)?.timeoutSeconds ??
+                    options.timeoutSeconds;
                 try {
                     await runTrackedCommand(
                         progress,
@@ -1315,7 +1394,7 @@ async function applyUpdate(options, repoRoot, progress) {
                             absoluteTimeoutMs,
                             inactivityTimeoutMs: Math.max(
                                 10 * 60 * 1_000,
-                                options.timeoutSeconds * 2 * 1_000 + 120_000
+                                finalPassTimeoutSeconds * 2 * 1_000 + 120_000
                             ),
                         }
                     );
@@ -1323,7 +1402,9 @@ async function applyUpdate(options, repoRoot, progress) {
                     throw categorize(error, "conversion", 6, "conversion");
                 }
             },
-            `Converted ${sourceCount} staged source fonts`
+            options.failedOnly
+                ? `Completed and reindexed all ${sourceCount} staged source fonts`
+                : `Converted ${sourceCount} staged source fonts`
         );
 
         const indexValue = await runProgressStage(
@@ -1497,8 +1578,10 @@ async function applyUpdate(options, repoRoot, progress) {
 
         finalResult = {
             archiveCount: release.archiveCount,
+            conversionConcurrency: options.conversionConcurrency,
             currentRef,
             disk,
+            failedOnly: options.failedOnly,
             metadataFile: resolve(destinationOutputs, "source-metadata.json"),
             mode: "apply",
             ok: true,
@@ -1509,6 +1592,8 @@ async function applyUpdate(options, repoRoot, progress) {
             sourceCount,
             status: "updated",
             targetRef,
+            timeoutRetries: options.timeoutRetries,
+            timeoutSeconds: options.timeoutSeconds,
         };
         return finalResult;
     } catch (error) {

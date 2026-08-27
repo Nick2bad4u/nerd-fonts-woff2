@@ -116,6 +116,8 @@ describe("reviewed Nerd Fonts update workflow", () => {
                 "--confirm",
                 "--allow-dirty",
                 "--concurrency=3",
+                "--failed-only",
+                "--timeout-retries=1",
             ]);
             const guided = parseWorkflowArguments(["guided", "--timeout=300"]);
             const invalid = [
@@ -123,6 +125,7 @@ describe("reviewed Nerd Fonts update workflow", () => {
                 ["apply", "--confirm", "--plan-fingerprint", "a".repeat(64)],
                 ["guided", "--confirm"],
                 ["review", "--allow-dirty"],
+                ["review", "--failed-only"],
                 ["review", "--plan-file", "../outside.json"],
                 ["review", "--", "--plan-file", "inside.json"],
             ].map((argumentsList) => {
@@ -157,6 +160,9 @@ describe("reviewed Nerd Fonts update workflow", () => {
                 "--allow-dirty",
                 "--concurrency",
                 "3",
+                "--failed-only",
+                "--timeout-retries",
+                "1",
             ]),
             guided: {
                 mode: "guided",
@@ -332,6 +338,7 @@ describe("reviewed Nerd Fonts update workflow", () => {
         expect(packageJson.scripts).toMatchObject({
             "fonts:update:apply": expect.stringContaining(" apply"),
             "fonts:update:guided": expect.stringContaining(" guided"),
+            "fonts:update:resume": expect.stringContaining("--failed-only"),
             "fonts:update:review": expect.stringContaining(" review"),
         });
 

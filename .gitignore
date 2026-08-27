@@ -863,6 +863,7 @@ gha-creds-*.json
 reports/
 TODO.md
 temp/
+**/.conversion-failures.json
 
 # VS Code
 !.vscode/mcp.json

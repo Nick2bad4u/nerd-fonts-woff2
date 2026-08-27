@@ -6,9 +6,10 @@
  * process after a timeout/crash.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
+
+import { atomicWriteFile } from "./safe-filesystem.mjs";
 
 if (typeof process.send !== "function") {
     throw new Error("WOFF2 conversion worker requires a parent IPC channel.");
@@ -21,7 +22,7 @@ let busy = false;
 
 process.send({ moduleMs, type: "ready" });
 
-process.on("message", (message) => {
+process.on("message", async (message) => {
     if (typeof message !== "object" || message === null) return;
     const type = Reflect.get(message, "type");
     if (type === "shutdown") {
@@ -58,8 +59,7 @@ process.on("message", (message) => {
 
         activePhase = "write";
         phaseStartedAt = performance.now();
-        mkdirSync(dirname(outputPath), { recursive: true });
-        writeFileSync(outputPath, output);
+        await atomicWriteFile(outputPath, output, { mode: 0o666 });
         timings.writeMs = performance.now() - phaseStartedAt;
         timings.taskMs = performance.now() - taskStartedAt;
         process.send?.({

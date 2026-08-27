@@ -80,6 +80,7 @@ describe("nerd Fonts updater hardening", () => {
 
         const result = runInlineModule(`
             import { parseUpdateOptions } from ${JSON.stringify(updaterUrl)};
+            const fingerprint = "a".repeat(64);
             const invalid = [
                 ["--concurrency", "8workers"],
                 ["--concurrency=0"],
@@ -87,9 +88,18 @@ describe("nerd Fonts updater hardening", () => {
                 ["--apply=true"],
                 ["--timeout=240seconds"],
                 ["--timeout=86401"],
+                ["--timeout-retries=00"],
                 ["--ref", "v3.5.1", "--ref=v3.5.1"],
                 ["--apply", "--convert"],
                 ["--apply", "--confirm"],
+                ["--failed-only"],
+                [
+                    "--apply",
+                    "--confirm",
+                    "--plan-fingerprint=" + fingerprint,
+                    "--failed-only",
+                    "--force-rebuild",
+                ],
                 ["--ref=v3.5.1", "--", "unexpected"],
             ].map((argumentsList) => {
                 try {
@@ -99,13 +109,14 @@ describe("nerd Fonts updater hardening", () => {
                     return error.message;
                 }
             });
-            const fingerprint = "a".repeat(64);
             const valid = parseUpdateOptions([
                 "--ref=v3.5.1",
                 "--download-concurrency=8",
                 "--apply",
                 "--confirm",
                 "--plan-fingerprint=" + fingerprint,
+                "--failed-only",
+                "--timeout-retries=1",
                 "--",
             ]);
             process.stdout.write(JSON.stringify({ invalid, valid }));
@@ -114,8 +125,12 @@ describe("nerd Fonts updater hardening", () => {
             invalid: Array<null | string>;
             valid: {
                 apply: boolean;
+                conversionConcurrency: number;
                 downloadConcurrency: number;
+                failedOnly: boolean;
                 planFingerprint: string;
+                timeoutRetries: number;
+                timeoutSeconds: number;
                 upstreamRef: string;
             };
         };
@@ -134,7 +149,11 @@ describe("nerd Fonts updater hardening", () => {
         );
         expect(output.valid).toMatchObject({
             apply: true,
+            conversionConcurrency: 4,
             downloadConcurrency: 8,
+            failedOnly: true,
+            timeoutRetries: 1,
+            timeoutSeconds: 1200,
             upstreamRef: "v3.5.1",
         });
         expect(output.valid.planFingerprint).toBe("a".repeat(64));
@@ -324,7 +343,7 @@ describe("nerd Fonts updater hardening", () => {
 
 describe("process and filesystem hardening", () => {
     it("streams JSON diagnostics, bounds output, strips tokens, and times out", () => {
-        expect.assertions(12);
+        expect.assertions(13);
 
         const result = runInlineModule(`
             import { runCommand } from ${JSON.stringify(commandRunnerUrl)};
@@ -362,6 +381,14 @@ describe("process and filesystem hardening", () => {
                 },
                 mode: "capture",
             });
+            const longDeadline = await runCommand(process.execPath, [
+                "--eval",
+                "setTimeout(() => process.stdout.write('long-ok'), 100)",
+            ], {
+                absoluteTimeoutMs: 2_147_483_648,
+                cwd: ${JSON.stringify(repoRoot)},
+                mode: "capture",
+            });
             let timedOut;
             let descendantAlive;
             let serialized;
@@ -391,6 +418,7 @@ describe("process and filesystem hardening", () => {
                 descendantAlive,
                 diagnostic: diagnostic.join(""),
                 largeLength: large.stdout.length,
+                longDeadline: longDeadline.stdout,
                 routed,
                 serialized,
                 timedOut,
@@ -401,6 +429,7 @@ describe("process and filesystem hardening", () => {
             descendantAlive: boolean;
             diagnostic: string;
             largeLength: number;
+            longDeadline: string;
             routed: { stderr: string; stdout: string };
             serialized: {
                 command: {
@@ -424,6 +453,7 @@ describe("process and filesystem hardening", () => {
         expect(output.diagnostic).toContain("err");
         expect(output.routed).toMatchObject({ stderr: "err", stdout: "out" });
         expect(output.largeLength).toBe(1024 ** 2);
+        expect(output.longDeadline).toBe("long-ok");
         expect(output.tokenVisible).toBe("missing");
         expect(output.descendantAlive).toBe(false);
         expect(output.serialized.command).toMatchObject({

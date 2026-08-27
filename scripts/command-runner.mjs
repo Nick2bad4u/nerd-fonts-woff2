@@ -1,6 +1,43 @@
 import { spawn } from "node:child_process";
 
 const DEFAULT_TAIL_BYTES = 1024 * 1024;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+/**
+ * Node clamps overflowing timer delays to one millisecond. Conversion deadlines
+ * can legitimately exceed that limit, so schedule them in bounded segments
+ * against one fixed wall-clock deadline.
+ *
+ * @param {() => void} callback
+ * @param {number} delayMs
+ *
+ * @returns {{ clear: () => void }}
+ */
+function createDeadlineTimer(callback, delayMs) {
+    const deadlineMs = Date.now() + delayMs;
+    /** @type {NodeJS.Timeout | undefined} */
+    let timer;
+
+    function scheduleNextSegment() {
+        const remainingMs = deadlineMs - Date.now();
+        if (remainingMs <= 0) {
+            callback();
+            return;
+        }
+        timer = setTimeout(
+            scheduleNextSegment,
+            Math.min(remainingMs, MAX_TIMER_DELAY_MS)
+        );
+        timer.unref();
+    }
+
+    scheduleNextSegment();
+    return {
+        clear() {
+            if (timer !== undefined) clearTimeout(timer);
+        },
+    };
+}
 
 /**
  * @param {string} value
@@ -170,9 +207,9 @@ export function runCommand(command, argumentsList, options) {
         let settled = false;
         let stdoutTail = Buffer.alloc(0);
         let stderrTail = Buffer.alloc(0);
-        /** @type {NodeJS.Timeout | undefined} */
+        /** @type {{ clear: () => void } | undefined} */
         let absoluteTimer;
-        /** @type {NodeJS.Timeout | undefined} */
+        /** @type {{ clear: () => void } | undefined} */
         let inactivityTimer;
         /** @type {"absolute" | "inactivity" | undefined} */
         let timeoutKind;
@@ -180,17 +217,16 @@ export function runCommand(command, argumentsList, options) {
         let timeoutCleanup;
 
         function clearTimers() {
-            if (absoluteTimer !== undefined) clearTimeout(absoluteTimer);
-            if (inactivityTimer !== undefined) clearTimeout(inactivityTimer);
+            absoluteTimer?.clear();
+            inactivityTimer?.clear();
         }
 
         function resetInactivityTimer() {
             if (options.inactivityTimeoutMs === undefined) return;
-            if (inactivityTimer !== undefined) clearTimeout(inactivityTimer);
-            inactivityTimer = setTimeout(() => {
+            inactivityTimer?.clear();
+            inactivityTimer = createDeadlineTimer(() => {
                 void beginTimeout("inactivity");
             }, options.inactivityTimeoutMs);
-            inactivityTimer.unref();
         }
 
         /** @param {"absolute" | "inactivity"} kind */
@@ -297,10 +333,9 @@ export function runCommand(command, argumentsList, options) {
         }
 
         if (options.absoluteTimeoutMs !== undefined) {
-            absoluteTimer = setTimeout(() => {
+            absoluteTimer = createDeadlineTimer(() => {
                 void beginTimeout("absolute");
             }, options.absoluteTimeoutMs);
-            absoluteTimer.unref();
         }
         resetInactivityTimer();
     });

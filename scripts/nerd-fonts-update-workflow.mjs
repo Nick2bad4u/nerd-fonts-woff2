@@ -6,6 +6,12 @@ import { stdin, stdout } from "node:process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+    DEFAULT_CONVERSION_CONCURRENCY,
+    DEFAULT_FONT_TIMEOUT_SECONDS,
+    DEFAULT_TIMEOUT_RETRIES,
+    MAX_TIMEOUT_RETRIES,
+} from "./font-conversion-policy.mjs";
 import { isMainModule, parseSemverTag } from "./nerd-fonts-release.mjs";
 import {
     main as runUpdater,
@@ -68,6 +74,13 @@ function extractPlanFile(argumentsList) {
         const rawArgument = argumentsList[index];
         if (rawArgument === undefined) continue;
         if (rawArgument === "--") {
+            if (
+                process.env["npm_lifecycle_event"]?.startsWith(
+                    "fonts:update:"
+                ) === true
+            ) {
+                continue;
+            }
             forwardedArguments.push(...argumentsList.slice(index));
             break;
         }
@@ -198,7 +211,10 @@ export function parseWorkflowArguments(argumentsList) {
     }
     if (
         rawMode === "review" &&
-        (parsed.allowDirty || parsed.breakStaleLock || parsed.forceRebuild)
+        (parsed.allowDirty ||
+            parsed.breakStaleLock ||
+            parsed.failedOnly ||
+            parsed.forceRebuild)
     ) {
         throw new ReviewedUpdateWorkflowError(
             "Review mode does not accept apply-only override flags."
@@ -213,15 +229,13 @@ export function parseWorkflowArguments(argumentsList) {
     planArguments.push(
         "--download-concurrency",
         String(parsed.downloadConcurrency),
+        "--concurrency",
+        String(parsed.conversionConcurrency),
         "--timeout",
-        String(parsed.timeoutSeconds)
+        String(parsed.timeoutSeconds),
+        "--timeout-retries",
+        String(parsed.timeoutRetries)
     );
-    if (parsed.conversionConcurrency !== null) {
-        planArguments.push(
-            "--concurrency",
-            String(parsed.conversionConcurrency)
-        );
-    }
     if (parsed.verbose) planArguments.push("--verbose");
     if (parsed.color === true) planArguments.push("--color");
     if (parsed.color === false) planArguments.push("--no-color");
@@ -233,6 +247,7 @@ export function parseWorkflowArguments(argumentsList) {
     ];
     if (parsed.allowDirty) applyArguments.push("--allow-dirty");
     if (parsed.breakStaleLock) applyArguments.push("--break-stale-lock");
+    if (parsed.failedOnly) applyArguments.push("--failed-only");
     if (parsed.forceRebuild) applyArguments.push("--force-rebuild");
 
     return {
@@ -379,17 +394,20 @@ function printWorkflowHelp() {
             `Commands:\n` +
             `  npm run -- fonts:update:review -- --ref <vX.Y.Z>\n` +
             `  npm run -- fonts:update:apply -- --confirm\n` +
+            `  npm run fonts:update:resume\n` +
             `  npm run fonts:update:guided\n\n` +
             `The reviewed plan is saved to:\n  ${defaultPlanFile}\n\n` +
             `Common options:\n` +
             `  --ref <tag>                 Target tag (review/guided)\n` +
             `  --plan-file <path>          Repository-local reviewed-plan file\n` +
             `  --download-concurrency <n>  1-8 downloads\n` +
-            `  --concurrency <n>           1-32 conversion workers\n` +
-            `  --timeout <seconds>         Per-font timeout\n` +
+            `  --concurrency <n>           1-32 conversion workers (default ${DEFAULT_CONVERSION_CONCURRENCY})\n` +
+            `  --timeout <seconds>         Per-font timeout (default ${DEFAULT_FONT_TIMEOUT_SECONDS})\n` +
+            `  --timeout-retries <n>       0-${MAX_TIMEOUT_RETRIES} timeout-only retry passes (default ${DEFAULT_TIMEOUT_RETRIES})\n` +
             `  --verbose                   Detailed progress and timings\n` +
             `  --color / --no-color        Force or disable ANSI output\n` +
             `  --allow-dirty               Apply-only dirty-path override\n` +
+            `  --failed-only               Apply-only reuse of validated staging\n` +
             `  --force-rebuild             Apply-only same-ref rebuild\n` +
             `  --break-stale-lock          Apply-only malformed-lock recovery\n`
     );

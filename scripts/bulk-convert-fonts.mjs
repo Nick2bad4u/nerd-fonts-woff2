@@ -10,25 +10,39 @@
  * Reads: fonts/original/** /_.{ttf,otf} Writes: fonts/woff2/** /_.woff2
  * (mirrors the source tree) fonts/woff2/index.json (FontIndexEntry array)
  *
- * Skips already-up-to-date files unless --force is passed.
+ * Reuses current WOFF2 outputs unless --force is passed. --failed-only adds a
+ * safety gate that requires at least one reusable staged output.
  *
- * Usage: node scripts/bulk-convert-fonts.mjs node
- * scripts/bulk-convert-fonts.mjs --force node scripts/bulk-convert-fonts.mjs
- * --dry-run
+ * Usage: node scripts/bulk-convert-fonts.mjs --dry-run node
+ * scripts/bulk-convert-fonts.mjs --convert --confirm --force node
+ * scripts/bulk-convert-fonts.mjs --convert --confirm --failed-only
  */
 
 import {
+    closeSync,
     existsSync,
     mkdirSync,
+    openSync,
+    readSync,
     readdirSync,
     rmSync,
     statSync,
     writeFileSync,
 } from "node:fs";
-import { cpus } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+    DEFAULT_CONVERSION_CONCURRENCY,
+    DEFAULT_FONT_TIMEOUT_SECONDS,
+    DEFAULT_TIMEOUT_RETRIES,
+    FAILURE_DETAIL_LIMIT,
+    MAX_FONT_TIMEOUT_SECONDS,
+    MAX_TIMEOUT_RETRIES,
+    createConversionPasses,
+    isFontTimeoutMessage,
+    partitionConversionFailures,
+} from "./font-conversion-policy.mjs";
 import { FontConversionProcessPool } from "./font-conversion-process-pool.mjs";
 import {
     assertPathInsideRepository,
@@ -42,6 +56,7 @@ import {
     resolveColorEnabled,
     styleText,
 } from "./terminal-output.mjs";
+import { atomicWriteJson } from "./safe-filesystem.mjs";
 
 const repoRoot = process.cwd();
 /** @type {BulkOptions} */
@@ -64,14 +79,14 @@ const force = options.force;
 const verbose = options.verbose;
 const colorEnabled = resolveColorEnabled(options.color, process.stdout);
 
-/**
- * Maximum parallel conversions. Cap at 8 (32 for user-provided) to avoid
- * excessive memory use.
- */
-const CONCURRENCY = options.concurrency ?? Math.min(cpus().length, 8);
-
-/** Kill a worker if a single font takes longer than this. */
-const FONT_TIMEOUT_MS = (options.timeoutSeconds ?? 60) * 1000;
+const CONCURRENCY = options.concurrency;
+const FONT_TIMEOUT_MS = options.timeoutSeconds * 1000;
+const CONVERSION_PASSES = createConversionPasses(
+    CONCURRENCY,
+    options.timeoutSeconds,
+    options.timeoutRetries
+);
+const WOFF2_HEADER_SIZE = 48;
 
 /**
  * @typedef {{
@@ -91,17 +106,20 @@ const FONT_TIMEOUT_MS = (options.timeoutSeconds ?? 60) * 1000;
 /**
  * @typedef {{
  *     color: boolean | null;
- *     concurrency: number | null;
+ *     concurrency: number;
  *     confirm: boolean;
  *     convert: boolean;
  *     dryRun: boolean;
+ *     failedOnly: boolean;
+ *     failureReport: string;
  *     force: boolean;
  *     outputDir: string;
  *     prune: boolean;
  *     publicOutputDir: string;
  *     publicSourceDir: string;
  *     sourceDir: string;
- *     timeoutSeconds: number | null;
+ *     timeoutRetries: number;
+ *     timeoutSeconds: number;
  *     verbose: boolean;
  * }} BulkOptions
  */
@@ -116,17 +134,20 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
     /** @type {BulkOptions} */
     const parsed = {
         color: null,
-        concurrency: null,
+        concurrency: DEFAULT_CONVERSION_CONCURRENCY,
         confirm: false,
         convert: false,
         dryRun: false,
+        failedOnly: false,
+        failureReport: "",
         force: false,
         outputDir: resolve(root, "fonts", "woff2"),
         prune: false,
         publicOutputDir: "fonts/woff2",
         publicSourceDir: "fonts/original",
         sourceDir: resolve(root, "fonts", "original"),
-        timeoutSeconds: null,
+        timeoutRetries: DEFAULT_TIMEOUT_RETRIES,
+        timeoutSeconds: DEFAULT_FONT_TIMEOUT_SECONDS,
         verbose: false,
     };
 
@@ -137,6 +158,7 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
             argument === "--confirm" ||
             argument === "--convert" ||
             argument === "--dry-run" ||
+            argument === "--failed-only" ||
             argument === "--force" ||
             argument === "--no-color" ||
             argument === "--prune" ||
@@ -163,14 +185,16 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
             else if (key === "confirm") parsed.confirm = true;
             else if (key === "convert") parsed.convert = true;
             else if (key === "force") parsed.force = true;
+            else if (key === "failedonly") parsed.failedOnly = true;
             else if (key === "prune") parsed.prune = true;
             else parsed.verbose = true;
             continue;
         }
 
-        const equalsMatch = /^--(concurrency|timeout)=(.+)$/v.exec(
-            argument ?? ""
-        );
+        const equalsMatch =
+            /^--(concurrency|failure-report|timeout|timeout-retries)=(.+)$/v.exec(
+                argument ?? ""
+            );
         if (equalsMatch !== null) {
             const [
                 ,
@@ -178,9 +202,28 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
                 value,
             ] = equalsMatch;
             if (name === "concurrency") {
-                parsed.concurrency = Number.parseInt(value ?? "", 10);
+                parsed.concurrency = parseIntegerOption(
+                    value ?? "",
+                    "--concurrency",
+                    1,
+                    32
+                );
+            } else if (name === "failure-report") {
+                parsed.failureReport = resolve(root, value ?? "");
+            } else if (name === "timeout-retries") {
+                parsed.timeoutRetries = parseIntegerOption(
+                    value ?? "",
+                    "--timeout-retries",
+                    0,
+                    MAX_TIMEOUT_RETRIES
+                );
             } else {
-                parsed.timeoutSeconds = Number.parseInt(value ?? "", 10);
+                parsed.timeoutSeconds = parseIntegerOption(
+                    value ?? "",
+                    "--timeout",
+                    1,
+                    MAX_FONT_TIMEOUT_SECONDS
+                );
             }
 
             continue;
@@ -188,11 +231,13 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
 
         if (
             argument === "--concurrency" ||
+            argument === "--failure-report" ||
             argument === "--output-dir" ||
             argument === "--public-output-dir" ||
             argument === "--public-source-dir" ||
             argument === "--source-dir" ||
-            argument === "--timeout"
+            argument === "--timeout" ||
+            argument === "--timeout-retries"
         ) {
             const value = argumentsList[index + 1];
             if (typeof value !== "string" || value.trim().length === 0) {
@@ -200,7 +245,9 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
             }
 
             if (argument === "--concurrency") {
-                parsed.concurrency = Number.parseInt(value, 10);
+                parsed.concurrency = parseIntegerOption(value, argument, 1, 32);
+            } else if (argument === "--failure-report") {
+                parsed.failureReport = resolve(root, value);
             } else if (argument === "--output-dir") {
                 parsed.outputDir = resolve(root, value);
             } else if (argument === "--public-output-dir") {
@@ -209,8 +256,20 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
                 parsed.publicSourceDir = normalizePublicPath(value);
             } else if (argument === "--source-dir") {
                 parsed.sourceDir = resolve(root, value);
+            } else if (argument === "--timeout-retries") {
+                parsed.timeoutRetries = parseIntegerOption(
+                    value,
+                    argument,
+                    0,
+                    MAX_TIMEOUT_RETRIES
+                );
             } else {
-                parsed.timeoutSeconds = Number.parseInt(value, 10);
+                parsed.timeoutSeconds = parseIntegerOption(
+                    value,
+                    argument,
+                    1,
+                    MAX_FONT_TIMEOUT_SECONDS
+                );
             }
 
             index += 1;
@@ -218,22 +277,6 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
         }
 
         throw new Error(`Unknown option: ${argument}`);
-    }
-
-    if (
-        parsed.concurrency !== null &&
-        (!Number.isInteger(parsed.concurrency) ||
-            parsed.concurrency < 1 ||
-            parsed.concurrency > 32)
-    ) {
-        throw new Error("--concurrency must be an integer from 1 through 32.");
-    }
-
-    if (
-        parsed.timeoutSeconds !== null &&
-        (!Number.isInteger(parsed.timeoutSeconds) || parsed.timeoutSeconds < 1)
-    ) {
-        throw new Error("--timeout must be a positive integer in seconds.");
     }
 
     if (parsed.convert && !parsed.confirm && !parsed.dryRun) {
@@ -245,11 +288,52 @@ export function parseBulkOptions(argumentsList, root = process.cwd()) {
     if (parsed.prune && !parsed.convert && !parsed.dryRun) {
         throw new Error("--prune requires --convert and --confirm.");
     }
+    if (parsed.failedOnly && !parsed.convert) {
+        throw new Error("--failed-only requires --convert and --confirm.");
+    }
+    if (parsed.failedOnly && parsed.force) {
+        throw new Error("--failed-only and --force cannot be combined.");
+    }
 
-    for (const checkedPath of [parsed.sourceDir, parsed.outputDir]) {
+    if (parsed.failureReport.length === 0) {
+        parsed.failureReport = resolve(
+            parsed.outputDir,
+            ".conversion-failures.json"
+        );
+    }
+
+    for (const checkedPath of [
+        parsed.sourceDir,
+        parsed.outputDir,
+        parsed.failureReport,
+    ]) {
         assertPathInsideRepository(root, checkedPath);
     }
 
+    return parsed;
+}
+
+/**
+ * @param {string} value
+ * @param {string} optionName
+ * @param {number} minimum
+ * @param {number} maximum
+ *
+ * @returns {number}
+ */
+function parseIntegerOption(value, optionName, minimum, maximum) {
+    const integerPattern = minimum === 0 ? /^(?:0|[1-9]\d*)$/v : /^[1-9]\d*$/v;
+    if (!integerPattern.test(value)) {
+        throw new Error(
+            `${optionName} must be an integer from ${minimum} through ${maximum}.`
+        );
+    }
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+        throw new Error(
+            `${optionName} must be an integer from ${minimum} through ${maximum}.`
+        );
+    }
     return parsed;
 }
 
@@ -385,19 +469,70 @@ function extractFamily(sourcePath) {
 }
 
 /**
- * Return true if the output file exists and is newer than the source.
+ * Return true only when an existing output is plausibly complete and belongs to
+ * the current staged source tree. Full catalog verification still runs before
+ * promotion.
  *
  * @param {string} outputPath
  * @param {string} sourcePath
  *
  * @returns {boolean}
  */
-function isUpToDate(outputPath, sourcePath) {
-    if (!existsSync(outputPath)) {
+export function isReusableOutput(outputPath, sourcePath) {
+    if (!existsSync(outputPath)) return false;
+
+    const outputStat = statSync(outputPath);
+    const sourceStat = statSync(sourcePath);
+    if (
+        !outputStat.isFile() ||
+        outputStat.size < WOFF2_HEADER_SIZE ||
+        outputStat.mtimeMs < sourceStat.mtimeMs
+    ) {
         return false;
     }
 
-    return statSync(outputPath).mtimeMs >= statSync(sourcePath).mtimeMs;
+    const descriptor = openSync(outputPath, "r");
+    try {
+        const header = Buffer.allocUnsafe(WOFF2_HEADER_SIZE);
+        if (
+            readSync(descriptor, header, 0, WOFF2_HEADER_SIZE, 0) !==
+            WOFF2_HEADER_SIZE
+        ) {
+            return false;
+        }
+        return (
+            header.toString("ascii", 0, 4) === "wOF2" &&
+            header.readUInt32BE(8) === outputStat.size
+        );
+    } finally {
+        closeSync(descriptor);
+    }
+}
+
+/**
+ * @param {string} sourcePath
+ * @param {boolean} converted
+ *
+ * @returns {FontIndexEntry}
+ */
+function createIndexEntry(sourcePath, converted) {
+    const outputPath = toOutputPath(sourcePath);
+    return {
+        converted,
+        family: extractFamily(sourcePath),
+        fileName: outputPath.split(/[\\/]/u).at(-1) ?? "",
+        outputPath: toPublicPath(
+            outputRoot,
+            outputPath,
+            options.publicOutputDir
+        ),
+        sizeBytes: statSync(outputPath).size,
+        sourcePath: toPublicPath(
+            sourceRoot,
+            sourcePath,
+            options.publicSourceDir
+        ),
+    };
 }
 
 /**
@@ -562,33 +697,40 @@ function printFontResult(
 }
 
 /**
- * Run conversions for all fonts up to CONCURRENCY at a time.
+ * @typedef {{
+ *     message: string;
+ *     sourcePath: string;
+ *     timedOut: boolean;
+ *     timings: FontConversionTimings;
+ * }} FontFailure
+ */
+
+/**
+ * Run one conversion pass. The caller decides whether timeout failures receive
+ * another pass with a more conservative worker policy.
  *
  * @param {readonly string[]} sourceFonts
+ * @param {{ concurrency: number; timeoutSeconds: number }} pass
  *
  * @returns {Promise<{
  *     converted: number;
- *     entries: FontIndexEntry[];
- *     failed: number;
- *     failures: string[];
- *     skipped: number;
+ *     convertedSources: string[];
+ *     failures: FontFailure[];
  * }>}
  */
-async function runConversionLoop(sourceFonts) {
+async function runConversionLoop(sourceFonts, pass) {
     const conversionPool = dryRun
         ? null
         : new FontConversionProcessPool({
-              size: CONCURRENCY,
-              timeoutMs: FONT_TIMEOUT_MS,
+              size: pass.concurrency,
+              timeoutMs: pass.timeoutSeconds * 1000,
               workerUrl: workerScript,
           });
-    /** @type {(FontIndexEntry | undefined)[]} */
-    const entries = new Array(sourceFonts.length);
-    /** @type {string[]} */
+    /** @type {FontFailure[]} */
     const failures = [];
+    /** @type {string[]} */
+    const convertedSources = [];
     let converted = 0;
-    let skipped = 0;
-    let failed = 0;
     let completed = 0;
     let active = 0;
 
@@ -602,60 +744,12 @@ async function runConversionLoop(sourceFonts) {
      */
     async function processFont(sourcePath, index) {
         const outputPath = toOutputPath(sourcePath);
-        const family = extractFamily(sourcePath);
         const fileName = outputPath.split(/[\\/]/u).at(-1) ?? "";
-
-        // Already up to date — skip without converting
-        if (!force && isUpToDate(outputPath, sourcePath)) {
-            entries[index] = {
-                converted: false,
-                family,
-                fileName,
-                outputPath: toPublicPath(
-                    outputRoot,
-                    outputPath,
-                    options.publicOutputDir
-                ),
-                sizeBytes: statSync(outputPath).size,
-                sourcePath: toPublicPath(
-                    sourceRoot,
-                    sourcePath,
-                    options.publicSourceDir
-                ),
-            };
-            skipped += 1;
-            completed += 1;
-            printFontResult(
-                "SKIP",
-                sourcePath,
-                completed,
-                sourceFonts.length,
-                active,
-                null,
-                entries[index]?.sizeBytes
-            );
-            return;
-        }
 
         // Dry-run: record intent without writing files
         if (dryRun) {
-            entries[index] = {
-                converted: false,
-                family,
-                fileName,
-                outputPath: toPublicPath(
-                    outputRoot,
-                    outputPath,
-                    options.publicOutputDir
-                ),
-                sizeBytes: null,
-                sourcePath: toPublicPath(
-                    sourceRoot,
-                    sourcePath,
-                    options.publicSourceDir
-                ),
-            };
             converted += 1;
+            convertedSources.push(sourcePath);
             completed += 1;
             printFontResult(
                 "PLAN",
@@ -717,43 +811,17 @@ async function runConversionLoop(sourceFonts) {
         /** @type {FontProgressStatus} */
         let progressStatus;
         if (result.ok) {
-            entries[index] = {
-                converted: true,
-                family,
-                fileName,
-                outputPath: toPublicPath(
-                    outputRoot,
-                    outputPath,
-                    options.publicOutputDir
-                ),
-                sizeBytes: result.sizeBytes ?? null,
-                sourcePath: toPublicPath(
-                    sourceRoot,
-                    sourcePath,
-                    options.publicSourceDir
-                ),
-            };
             converted += 1;
+            convertedSources.push(sourcePath);
             progressStatus = "DONE";
         } else {
             const message = result.error ?? "unknown error";
-            entries[index] = {
-                converted: false,
-                family,
-                fileName,
-                outputPath: toPublicPath(
-                    outputRoot,
-                    outputPath,
-                    options.publicOutputDir
-                ),
-                sizeBytes: null,
-                sourcePath: toPublicPath(
-                    sourceRoot,
-                    sourcePath,
-                    options.publicSourceDir
-                ),
-            };
-            failures.push(`${sourcePath}: ${message}`);
+            failures.push({
+                message,
+                sourcePath,
+                timedOut: isFontTimeoutMessage(message),
+                timings: result.timings,
+            });
             if (!verbose) {
                 const failureDescription = sanitizeTerminalText(
                     `${fileName}: ${message}`
@@ -762,8 +830,6 @@ async function runConversionLoop(sourceFonts) {
                     `  ${styleText(colorEnabled, [ANSI.bold, ANSI.red], "[FAIL]")} ${failureDescription}\n`
                 );
             }
-
-            failed += 1;
             progressStatus = "FAIL";
         }
 
@@ -779,7 +845,7 @@ async function runConversionLoop(sourceFonts) {
         );
     }
 
-    // Concurrency pool — keep up to CONCURRENCY tasks in flight at once
+    // Concurrency pool — keep up to the pass limit in flight at once.
     /** @type {Set<Promise<void>>} */
     const running = new Set();
 
@@ -797,7 +863,7 @@ async function runConversionLoop(sourceFonts) {
             });
             running.add(task);
 
-            if (running.size >= CONCURRENCY) {
+            if (running.size >= pass.concurrency) {
                 await Promise.race(running);
             }
         }
@@ -810,11 +876,39 @@ async function runConversionLoop(sourceFonts) {
 
     return {
         converted,
-        entries: /** @type {FontIndexEntry[]} */ (entries.filter(Boolean)),
-        failed,
+        convertedSources,
         failures,
-        skipped,
     };
+}
+
+/**
+ * Persist every final failure without flooding the parent command's diagnostic
+ * tail. The report is removed after a clean conversion.
+ *
+ * @param {readonly (FontFailure & { pass: number })[]} failures
+ *
+ * @returns {Promise<void>}
+ */
+async function writeFailureReport(failures) {
+    await atomicWriteJson(options.failureReport, {
+        failedOnly: options.failedOnly,
+        failures: failures.map((failure) => ({
+            message: failure.message,
+            outputPath: relative(outputRoot, toOutputPath(failure.sourcePath))
+                .split(sep)
+                .join("/"),
+            pass: failure.pass,
+            sourcePath: relative(sourceRoot, failure.sourcePath)
+                .split(sep)
+                .join("/"),
+            timedOut: failure.timedOut,
+            totalMs: failure.timings.totalMs,
+        })),
+        generatedAt: new Date().toISOString(),
+        outputDir: outputRoot,
+        schemaVersion: 1,
+        sourceDir: sourceRoot,
+    });
 }
 
 /**
@@ -869,20 +963,110 @@ async function main() {
         (outputPath) => !expectedOutputSet.has(outputPath)
     );
 
-    const action = dryRun ? "[dry-run] Planning" : "Converting";
+    const startMs = Date.now();
+    const reusableSources = force
+        ? []
+        : sourceFonts.filter((sourcePath) =>
+              isReusableOutput(toOutputPath(sourcePath), sourcePath)
+          );
+    const reusableSet = new Set(reusableSources);
+    const conversionCandidates = force
+        ? sourceFonts
+        : sourceFonts.filter((sourcePath) => !reusableSet.has(sourcePath));
+    if (
+        options.failedOnly &&
+        !dryRun &&
+        reusableSources.length === 0 &&
+        conversionCandidates.length > 0
+    ) {
+        throw new Error(
+            "--failed-only found no validated staged WOFF2 outputs to reuse. Run a normal apply instead."
+        );
+    }
+
+    const action = dryRun
+        ? "[dry-run] Planning"
+        : options.failedOnly
+          ? "Resuming"
+          : "Converting";
     process.stdout.write(
         `${styleText(colorEnabled, [ANSI.bold, ANSI.cyan], action)} ` +
+            `${styleText(colorEnabled, ANSI.bold, String(conversionCandidates.length))} of ` +
             `${styleText(colorEnabled, ANSI.bold, String(sourceFonts.length))} fonts ` +
             `${styleText(
                 colorEnabled,
                 ANSI.dim,
-                `(${CONCURRENCY} worker ${CONCURRENCY === 1 ? "process" : "processes"}, ${FONT_TIMEOUT_MS / 1000}s timeout each)`
+                `(${CONCURRENCY} worker ${CONCURRENCY === 1 ? "process" : "processes"}, ${FONT_TIMEOUT_MS / 1000}s timeout each, ${options.timeoutRetries} timeout ${options.timeoutRetries === 1 ? "retry" : "retries"})`
             )}...\n`
     );
+    if (reusableSources.length > 0) {
+        process.stdout.write(
+            `  Reusing ${reusableSources.length} validated WOFF2 outputs.\n`
+        );
+    }
 
-    const startMs = Date.now();
-    const { converted, entries, failed, failures, skipped } =
-        await runConversionLoop(sourceFonts);
+    const convertedSources = new Set();
+    /** @type {(FontFailure & { pass: number })[]} */
+    const finalFailures = [];
+    let pendingSources = conversionCandidates;
+    const passes = dryRun ? CONVERSION_PASSES.slice(0, 1) : CONVERSION_PASSES;
+    for (let passIndex = 0; passIndex < passes.length; passIndex += 1) {
+        const pass = passes[passIndex];
+        if (pass === undefined || pendingSources.length === 0) break;
+        if (passIndex > 0) {
+            process.stdout.write(
+                `\n${styleText(colorEnabled, [ANSI.bold, ANSI.yellow], `Retry pass ${pass.number}/${passes.length}`)}: ` +
+                    `${pendingSources.length} timed-out fonts with ${pass.concurrency} ` +
+                    `${pass.concurrency === 1 ? "worker" : "workers"} and a ${pass.timeoutSeconds}s timeout.\n`
+            );
+        }
+
+        const result = await runConversionLoop(pendingSources, pass);
+        for (const sourcePath of result.convertedSources) {
+            convertedSources.add(sourcePath);
+        }
+
+        const partitioned = partitionConversionFailures(
+            result.failures.map((failure) => ({
+                ...failure,
+                pass: pass.number,
+            })),
+            passIndex < passes.length - 1
+        );
+        finalFailures.push(...partitioned.finalFailures);
+        pendingSources = partitioned.retrySources;
+    }
+
+    if (!dryRun && finalFailures.length === 0) {
+        const invalidOutputs = sourceFonts.filter(
+            (sourcePath) =>
+                !isReusableOutput(toOutputPath(sourcePath), sourcePath)
+        );
+        for (const sourcePath of invalidOutputs) {
+            finalFailures.push({
+                message: "output is missing or failed WOFF2 resume validation",
+                pass: CONVERSION_PASSES.at(-1)?.number ?? 1,
+                sourcePath,
+                timedOut: false,
+                timings: {
+                    convertMs: null,
+                    moduleMs: 0,
+                    overheadMs: null,
+                    queueMs: 0,
+                    readMs: null,
+                    totalMs: 0,
+                    workerId: 0,
+                    workerMs: 0,
+                    workerReused: false,
+                    writeMs: null,
+                },
+            });
+        }
+    }
+
+    const converted = convertedSources.size;
+    const failed = finalFailures.length;
+    const skipped = reusableSources.length;
 
     if (!dryRun && failed === 0) {
         if (options.prune) {
@@ -892,13 +1076,25 @@ async function main() {
             }
         }
 
-        writeIndex(entries);
+        writeIndex(
+            sourceFonts.map((sourcePath) =>
+                createIndexEntry(sourcePath, convertedSources.has(sourcePath))
+            )
+        );
+        rmSync(options.failureReport, { force: true });
+    } else if (!dryRun) {
+        await writeFailureReport(finalFailures);
     }
 
     const duration = formatDuration(Date.now() - startMs);
+    const completionLabel = failed > 0 ? "Finished with failures" : "Done";
 
     process.stdout.write(
-        `\n${styleText(colorEnabled, [ANSI.bold, ANSI.green], "Done")} in ${duration}.\n`
+        `\n${styleText(
+            colorEnabled,
+            [ANSI.bold, failed > 0 ? ANSI.red : ANSI.green],
+            completionLabel
+        )} in ${duration}.\n`
     );
     process.stdout.write(
         `  ${dryRun ? "Would convert" : "Converted"}: ` +
@@ -919,15 +1115,24 @@ async function main() {
         process.stdout.write(`  Index:     ${indexFile}\n`);
     }
 
-    if (failures.length > 0) {
+    if (finalFailures.length > 0) {
         process.stderr.write(
             `\n${styleText(colorEnabled, [ANSI.bold, ANSI.red], "Failed fonts:")}\n`
         );
-        for (const f of failures) {
+        for (const failure of finalFailures.slice(0, FAILURE_DETAIL_LIMIT)) {
+            const description = `${displayFontPath(failure.sourcePath)}: ${failure.message}`;
             process.stderr.write(
-                `  ${styleText(colorEnabled, ANSI.red, sanitizeTerminalText(f))}\n`
+                `  ${styleText(colorEnabled, ANSI.red, sanitizeTerminalText(description))}\n`
             );
         }
+        if (finalFailures.length > FAILURE_DETAIL_LIMIT) {
+            process.stderr.write(
+                `  ... ${finalFailures.length - FAILURE_DETAIL_LIMIT} more failures.\n`
+            );
+        }
+        process.stderr.write(
+            `  Full failure report: ${options.failureReport}\n`
+        );
     }
 
     if (failed > 0) {
