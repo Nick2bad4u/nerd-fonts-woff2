@@ -51,7 +51,7 @@ function runInlineModule(source: string): {
 
 function runNpm(
     argumentsList: readonly string[],
-    environment: NodeJS.ProcessEnv = inheritedEnvironment
+    environment: typeof process.env = inheritedEnvironment
 ) {
     if (process.platform === "win32") {
         const npmExecPath = environment["npm_execpath"];
@@ -70,8 +70,14 @@ function runNpm(
                     !variableName.toLowerCase().startsWith("npm_")
             )
         );
+        const powerShellPath = nodePath.resolve(
+            environment["ProgramFiles"] ?? String.raw`C:\Program Files`,
+            "PowerShell",
+            "7",
+            "pwsh.exe"
+        );
         return spawnSync(
-            "pwsh.exe",
+            powerShellPath,
             [
                 "-NoLogo",
                 "-NoProfile",
@@ -92,7 +98,17 @@ function runNpm(
             }
         );
     }
-    return spawnSync("npm", argumentsList, {
+    const npmExecPath = environment["npm_execpath"];
+    if (npmExecPath === undefined) {
+        throw new Error(
+            "npm_execpath is required for the npm integration test."
+        );
+    }
+    const npmCliPath = nodePath.resolve(
+        nodePath.dirname(npmExecPath),
+        "npm-cli.js"
+    );
+    return spawnSync(process.execPath, [npmCliPath, ...argumentsList], {
         cwd: repoRoot,
         encoding: "utf8",
         env: environment,

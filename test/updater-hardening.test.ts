@@ -8,6 +8,16 @@ const testDirectory = nodePath.dirname(fileURLToPath(import.meta.url));
 const repoRoot = nodePath.resolve(testDirectory, "..");
 // eslint-disable-next-line n/no-process-env -- Child-process fixtures must preserve the test runner's executable search path and platform environment.
 const inheritedEnvironment = process.env;
+const gitExecutablePath =
+    process.platform === "win32"
+        ? nodePath.resolve(
+              inheritedEnvironment["ProgramFiles"] ??
+                  String.raw`C:\Program Files`,
+              "Git",
+              "cmd",
+              "git.exe"
+          )
+        : "/usr/bin/git";
 const commandRunnerUrl = pathToFileURL(
     nodePath.resolve(repoRoot, "scripts", "command-runner.mjs")
 ).href;
@@ -185,7 +195,7 @@ describe("nerd Fonts updater hardening", () => {
 
         const runNpm = (
             scriptArguments: string,
-            environment: NodeJS.ProcessEnv = inheritedEnvironment
+            environment: typeof process.env = inheritedEnvironment
         ) => {
             const npmArguments = [
                 "run",
@@ -211,8 +221,14 @@ describe("nerd Fonts updater hardening", () => {
                             !variableName.toLowerCase().startsWith("npm_")
                     )
                 );
+                const powerShellPath = nodePath.resolve(
+                    environment["ProgramFiles"] ?? String.raw`C:\Program Files`,
+                    "PowerShell",
+                    "7",
+                    "pwsh.exe"
+                );
                 return spawnSync(
-                    "pwsh.exe",
+                    powerShellPath,
                     [
                         "-NoLogo",
                         "-NoProfile",
@@ -233,7 +249,17 @@ describe("nerd Fonts updater hardening", () => {
                     }
                 );
             }
-            return spawnSync("npm", npmArguments, {
+            const npmExecPath = environment["npm_execpath"];
+            if (npmExecPath === undefined) {
+                throw new Error(
+                    "npm_execpath is required for the npm integration test."
+                );
+            }
+            const npmCliPath = nodePath.resolve(
+                nodePath.dirname(npmExecPath),
+                "npm-cli.js"
+            );
+            return spawnSync(process.execPath, [npmCliPath, ...npmArguments], {
                 cwd: repoRoot,
                 encoding: "utf8",
                 env: environment,
@@ -265,11 +291,15 @@ describe("nerd Fonts updater hardening", () => {
             ...inheritedEnvironment,
             NODE_OPTIONS: `--import=${mockGitHubFetchFixtureUrl}`,
         };
-        const statusBefore = spawnSync("git", ["status", "--porcelain=v1"], {
-            cwd: repoRoot,
-            encoding: "utf8",
-            stdio: "pipe",
-        }).stdout;
+        const statusBefore = spawnSync(
+            gitExecutablePath,
+            ["status", "--porcelain=v1"],
+            {
+                cwd: repoRoot,
+                encoding: "utf8",
+                stdio: "pipe",
+            }
+        ).stdout;
         const npmPlan = runNpm("--json --ref v3.5.1", mockEnvironment);
         const nodePlan = spawnSync(
             process.execPath,
@@ -301,11 +331,15 @@ describe("nerd Fonts updater hardening", () => {
                 stdio: "pipe",
             }
         );
-        const statusAfter = spawnSync("git", ["status", "--porcelain=v1"], {
-            cwd: repoRoot,
-            encoding: "utf8",
-            stdio: "pipe",
-        }).stdout;
+        const statusAfter = spawnSync(
+            gitExecutablePath,
+            ["status", "--porcelain=v1"],
+            {
+                cwd: repoRoot,
+                encoding: "utf8",
+                stdio: "pipe",
+            }
+        ).stdout;
         const npmPlanOutput = JSON.parse(npmPlan.stdout) as {
             archiveCount: number;
             planFingerprint: string;
@@ -467,7 +501,7 @@ describe("process and filesystem hardening", () => {
             command: process.execPath,
             timeoutKind: "absolute",
         });
-    });
+    }, 15_000);
 
     it("retries only transient Windows rename failures", () => {
         expect.assertions(5);

@@ -20,6 +20,8 @@ import {
     arrayFirst,
     arrayIncludes,
     arrayJoin,
+    assert,
+    assertDefined,
     isDefined,
     isEmpty,
     isInteger,
@@ -109,6 +111,8 @@ type SingleFontResult =
     | "converted"
     | "failed-break"
     | "failed-continue";
+
+const failedBreakResult: SingleFontResult = "failed-break";
 
 // ─── Error reporting ──────────────────────────────────────────────────────────
 
@@ -427,12 +431,10 @@ async function convertFonts(
         );
 
         const worker = async (): Promise<void> => {
-            while (queueIndex < queue.length && !shouldStop) {
+            while (!shouldStop && queueIndex < queue.length) {
                 const planned = queue[queueIndex];
                 queueIndex += 1;
-                if (!isDefined(planned)) {
-                    continue;
-                }
+                assertDefined(planned);
 
                 const outputPath = resolve(
                     join(config.outDir, planned.relativeOutputPath)
@@ -453,22 +455,23 @@ async function convertFonts(
                     failures
                 );
 
-                if (result === "converted") {
+                const isConverted = result === "converted";
+                if (isConverted) {
                     converted += 1;
-                    if (config.verbose) {
-                        writeOut(
-                            `  ${c.green("\u{2714}")} ${c.cyan(basename(planned.sourcePath))}`
-                        );
-                    }
-                } else if (result === "failed-break") {
+                }
+
+                if (result === failedBreakResult) {
                     // eslint-disable-next-line require-atomic-updates -- Node.js is single-threaded; no true race between check and assignment
                     shouldStop = true;
-                } else if (config.verbose) {
+                }
+
+                if (result !== failedBreakResult && config.verbose) {
+                    const marker = isConverted
+                        ? c.green("\u{2714}")
+                        : c.red("\u{2716}");
                     writeOut(
-                        `  ${c.red("\u{2716}")} ${c.cyan(basename(planned.sourcePath))}`
+                        `  ${marker} ${c.cyan(basename(planned.sourcePath))}`
                     );
-                } else {
-                    // Intentionally silent when verbose logging is disabled.
                 }
             }
         };
@@ -543,22 +546,22 @@ async function convertSingleFont(
                 commandResult.stderr.trim()
             )}`
         );
-        return config.failFast ? "failed-break" : "failed-continue";
+        return config.failFast ? failedBreakResult : "failed-continue";
     }
 
     const stagedOutput = stagedInput.replace(/\.(?:otf|ttf)$/iv, ".woff2");
-    if (!(await pathExists(stagedOutput))) {
+    if (!(await isPathExisting(stagedOutput))) {
         failures.push(
             `${planned.sourcePath}: converter did not produce expected .woff2 output`
         );
-        return config.failFast ? "failed-break" : "failed-continue";
+        return config.failFast ? failedBreakResult : "failed-continue";
     }
 
     if (!(await isValidWoff2File(stagedOutput))) {
         failures.push(
             `${planned.sourcePath}: converter output failed WOFF2 magic bytes validation`
         );
-        return config.failFast ? "failed-break" : "failed-continue";
+        return config.failFast ? failedBreakResult : "failed-continue";
     }
 
     await mkdir(dirname(outputPath), { recursive: true });
@@ -639,6 +642,15 @@ function isListFlag(key: string): boolean {
     );
 }
 
+async function isPathExisting(filePath: string): Promise<boolean> {
+    try {
+        await access(filePath, fsConstants.F_OK);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 // ─── Converter runner ─────────────────────────────────────────────────────────
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -702,14 +714,13 @@ async function listFontFiles(
 
             if (entry.isDirectory()) {
                 queue.push(absolutePath);
-            } else if (entry.isFile()) {
-                const extension = extname(entry.name)
-                    .replace(/^\./v, "")
-                    .toLowerCase();
+            }
 
-                if (setHas(includeExts, extension)) {
-                    discovered.push(absolutePath);
-                }
+            const extension = extname(entry.name)
+                .replace(/^\./v, "")
+                .toLowerCase();
+            if (entry.isFile() && setHas(includeExts, extension)) {
+                discovered.push(absolutePath);
             }
         }
     }
@@ -774,26 +785,24 @@ function parseArguments(args: readonly string[]): ParsedOptions {
 
         if (isBooleanFlag(key)) {
             parsed[key] = true;
-            continue;
+        } else {
+            const nextToken = args[index + 1];
+            const value = resolveTokenValue(inlineValue, nextToken);
+
+            if (
+                typeof nextToken === "string" &&
+                !isDefined(inlineValue) &&
+                !nextToken.startsWith("--")
+            ) {
+                index += 1;
+            }
+
+            if (isListFlag(key)) {
+                appendToListOption(parsed, key, value);
+            } else {
+                parsed[key] = value;
+            }
         }
-
-        const nextToken = args[index + 1];
-        const value = resolveTokenValue(inlineValue, nextToken);
-
-        if (
-            !isDefined(inlineValue) &&
-            typeof nextToken === "string" &&
-            !nextToken.startsWith("--")
-        ) {
-            index += 1;
-        }
-
-        if (isListFlag(key)) {
-            appendToListOption(parsed, key, value);
-            continue;
-        }
-
-        parsed[key] = value;
     }
 
     return parsed;
@@ -803,9 +812,7 @@ async function parseManifest(pathToManifest: string): Promise<ManifestFile> {
     const raw = await readFile(pathToManifest, "utf8");
     const parsed = JSON.parse(raw) as unknown;
 
-    if (!isRecord(parsed)) {
-        throw new Error("manifest root must be a JSON object");
-    }
+    assert(isRecord(parsed), "manifest root must be a JSON object");
 
     const manifest = parsed;
 
@@ -866,17 +873,6 @@ async function parseManifest(pathToManifest: string): Promise<ManifestFile> {
     }
 
     return manifestFile;
-}
-
-// ─── Build plan ───────────────────────────────────────────────────────────────
-
-async function pathExists(filePath: string): Promise<boolean> {
-    try {
-        await access(filePath, fsConstants.F_OK);
-        return true;
-    } catch {
-        return false;
-    }
 }
 
 // ─── Conversion ───────────────────────────────────────────────────────────────
@@ -1033,9 +1029,9 @@ function resolveIncludeExts(
 function resolveMaxFiles(
     maxFilesRaw: string | undefined,
     reportError: ErrorReporter
-): { code: number; ok: false } | { maxFiles: number | undefined; ok: true } {
+): { code: number; ok: false } | { maxFiles?: number; ok: true } {
     if (!isDefined(maxFilesRaw)) {
-        return { maxFiles: undefined, ok: true };
+        return { ok: true };
     }
 
     const parsedMax = Number(maxFilesRaw);

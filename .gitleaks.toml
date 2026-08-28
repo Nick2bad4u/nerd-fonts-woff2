@@ -24,22 +24,24 @@ title     = "Uptime Watcher - Enhanced Secret Detection Configuration"
 # Global allowlists for generated artifacts and known-safe files.
 [[allowlists]]
     description = "Ignore generated TypeDoc JSON output"
-    paths = [ '''^docs/typedoc\.json$''', ]
+    paths       = [
+        '''^docs/typedoc\.json$''',
+    ]
 
 # Custom rules for project-specific patterns
 [[rules]]
-    id = "electron-config-secrets"
+    id          = "electron-config-secrets"
     description = "Detect hardcoded secrets in Electron configuration files"
-    regex = '''(?i)(electron[_-]?(?:secret|key|token|password|credential))\s*[:=]\s*["']?([a-zA-Z0-9]{16,})["']?'''
+    regex       = '''(?i)(electron[_-]?(?:secret|key|token|password|credential))\s*[:=]\s*["']?([a-zA-Z0-9]{16,})["']?'''
     secretGroup = 2
-    keywords = [
+    keywords    = [
         "electron",
         "key",
         "password",
         "secret",
         "token",
     ]
-    tags = [
+    tags        = [
         "configuration",
         "electron",
         "secrets",
@@ -52,17 +54,17 @@ title     = "Uptime Watcher - Enhanced Secret Detection Configuration"
         regexes     = [ '''(?i)(example|demo|placeholder|test|sample)''' ]
 
 [[rules]]
-    id = "database-connection-strings"
+    id          = "database-connection-strings"
     description = "Detect database connection strings with embedded credentials"
-    regex = '''(?i)(database_url|db_url|connection_string)\s*[:=]\s*["']?([^"'\s]+://[^"'\s]*:[^"'\s]*@[^"'\s]+)["']?'''
+    regex       = '''(?i)(database_url|db_url|connection_string)\s*[:=]\s*["']?([^"'\s]+://[^"'\s]*:[^"'\s]*@[^"'\s]+)["']?'''
     secretGroup = 2
-    keywords = [
+    keywords    = [
         "connection",
         "database",
         "db",
         "url",
     ]
-    tags = [
+    tags        = [
         "connection-string",
         "credentials",
         "database",
@@ -75,11 +77,11 @@ title     = "Uptime Watcher - Enhanced Secret Detection Configuration"
         regexes     = [ '''(?i)(example|localhost|127\.0\.0\.1|test|demo)''' ]
 
 [[rules]]
-    id = "vite-env-secrets"
+    id          = "vite-env-secrets"
     description = "Detect secrets in Vite environment variable definitions"
-    regex = '''(?i)VITE_(?:API_|SECRET_|PASSWORD_|TOKEN_|KEY_)[A-Z0-9_]*\s*[:=]\s*["']?([a-zA-Z0-9+/=]{16,})["']?'''
+    regex       = '''(?i)VITE_(?:API_|SECRET_|PASSWORD_|TOKEN_|KEY_)[A-Z0-9_]*\s*[:=]\s*["']?([a-zA-Z0-9+/=]{16,})["']?'''
     secretGroup = 1
-    keywords = [
+    keywords    = [
         "api_",
         "key_",
         "password_",
@@ -87,7 +89,7 @@ title     = "Uptime Watcher - Enhanced Secret Detection Configuration"
         "token_",
         "vite_",
     ]
-    tags = [
+    tags        = [
         "environment",
         "frontend",
         "secrets",
@@ -97,32 +99,32 @@ title     = "Uptime Watcher - Enhanced Secret Detection Configuration"
     [[rules.allowlists]]
         description = "Allow development and test values"
         regexTarget = "secret"
-        regexes = [
+        regexes     = [
             '''(?i)(development|dev|test|local|localhost|example|demo|placeholder)''',
             '''^(true|false|1|0|yes|no|enabled|disabled)$''',
         ]
 
 # Enhanced AI platform detection rules (v8.28+ features)
 [[rules]]
-    id = "anthropic-enhanced-detection"
+    id          = "anthropic-enhanced-detection"
     description = "Enhanced detection for Anthropic API keys including all variants"
-    regex = '''\b(sk-ant-(?:api03|admin01)-[a-zA-Z0-9_\-]{93}AA)(?:[\x60'"\s;]|\\[nr]|$)'''
-    keywords = [
+    regex       = '''\b(sk-ant-(?:api03|admin01)-[a-zA-Z0-9_\-]{93}AA)(?:[\x60'"\s;]|\\[nr]|$)'''
+    keywords    = [
         "sk-ant-admin01",
         "sk-ant-api03",
     ]
-    tags = [
+    tags        = [
         "ai",
         "anthropic",
         "api-key",
     ]
 
 [[rules]]
-    id = "perplexity-api-detection"
+    id          = "perplexity-api-detection"
     description = "Detect Perplexity AI API keys"
-    regex = '''\b(pplx-[a-zA-Z0-9]{48})(?:[\x60'"\s;]|\\[nr]|$)'''
-    keywords = [ "pplx-" ]
-    tags = [
+    regex       = '''\b(pplx-[a-zA-Z0-9]{48})(?:[\x60'"\s;]|\\[nr]|$)'''
+    keywords    = [ "pplx-" ]
+    tags        = [
         "ai",
         "api-key",
         "perplexity",
