@@ -1,0 +1,178 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "name": "nerd-fonts-woff2",
+    "version": "1.0.5",
+    "private": false,
+    "description": "CLI pipeline for converting Nerd Fonts (and other fonts) from TTF/OTF to WOFF2 assets.",
+    "keywords": [
+        "fonts",
+        "woff2",
+        "nerdfonts",
+        "nerd-font",
+        "nerd-fonts",
+        "cli",
+        "webfont",
+        "ttf",
+        "conversion"
+    ],
+    "homepage": "https://nick2bad4u.github.io/nerd-fonts-woff2",
+    "bugs": {
+        "url": "https://github.com/Nick2bad4u/nerd-fonts-woff2/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Nick2bad4u/nerd-fonts-woff2.git"
+    },
+    "license": "MIT",
+    "author": {
+        "name": "Nick2bad4u",
+        "email": "20943337+Nick2bad4u@users.noreply.github.com",
+        "url": "https://github.com/Nick2bad4u"
+    },
+    "contributors": [
+        {
+            "name": "Nick2bad4u",
+            "email": "20943337+Nick2bad4u@users.noreply.github.com",
+            "url": "https://github.com/Nick2bad4u"
+        }
+    ],
+    "sideEffects": false,
+    "type": "module",
+    "exports": {
+        ".": {
+            "import": "./dist/cli.js",
+            "types": "./dist/cli.d.ts"
+        }
+    },
+    "main": "./dist/cli.js",
+    "types": "./dist/cli.d.ts",
+    "bin": {
+        "nerd-fonts-woff2": "nerd-fonts-woff2"
+    },
+    "files": [
+        "nerd-fonts-woff2",
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "assets:generate": "npm run fonts:convert",
+        "assets:plan": "npm run fonts:plan",
+        "build": "npx tsc -p tsconfig.build.json",
+        "changelog:generate": "git cliff --config node_modules/gitcliff-config-nick2bad4u/cliff.toml --github-repo Nick2bad4u/nerd-fonts-woff2 --output CHANGELOG.md",
+        "changelog:preview": "git cliff --config node_modules/gitcliff-config-nick2bad4u/cliff.toml --github-repo Nick2bad4u/nerd-fonts-woff2 --unreleased",
+        "changelog:release-notes": "git cliff --config node_modules/gitcliff-config-nick2bad4u/cliff.toml --github-repo Nick2bad4u/nerd-fonts-woff2 --current",
+        "dev": "node ./src/cli.ts",
+        "final": "npm install && npm run build && npm run typecheck && npm run lint:fix:quiet && npm run test && npm run fonts:setup && npm run fonts:check-upstream && npm run fonts:verify",
+        "fonts:check-upstream": "node ./scripts/check-nerd-fonts-updates.mjs",
+        "fonts:convert": "node ./scripts/bulk-convert-fonts.mjs",
+        "fonts:convert:cli": "npm run build && node ./scripts/convert-font-assets.mjs",
+        "fonts:convert:dry-run": "node ./scripts/bulk-convert-fonts.mjs --dry-run",
+        "fonts:download": "node ./scripts/download-nerd-fonts-sources.mjs",
+        "fonts:local": "npm run fonts:update",
+        "fonts:plan": "node ./scripts/bulk-convert-fonts.mjs --dry-run",
+        "fonts:publish:latest": "node ./scripts/publish-latest-fonts.mjs",
+        "fonts:publish:resume": "node ./scripts/publish-latest-fonts.mjs --resume --verbose",
+        "fonts:refresh:latest": "node ./scripts/font-publish-workflow.mjs",
+        "fonts:setup": "node ./scripts/setup-converter.mjs",
+        "fonts:update": "node ./scripts/update-nerd-fonts.mjs",
+        "fonts:update:apply": "node ./scripts/nerd-fonts-update-workflow.mjs apply",
+        "fonts:update:guided": "node ./scripts/nerd-fonts-update-workflow.mjs guided -- --verbose",
+        "fonts:update:resume": "node ./scripts/nerd-fonts-update-workflow.mjs apply --confirm --failed-only --verbose",
+        "fonts:update:review": "node ./scripts/nerd-fonts-update-workflow.mjs review",
+        "fonts:verify": "node ./scripts/verify-font-assets.mjs",
+        "format": "npx prettier . --write",
+        "format:check": "npx prettier . --check",
+        "lint": "npx eslint --cache --cache-strategy content --cache-location .cache/.eslintcache",
+        "lint:all": "npm run lint:prettier && npm run lint && npm run typecheck && npm run lint:gitleaks && npm run lint:yamllint",
+        "lint:all:fix": "npm run lint:prettier:fix && npm run lint:fix && npm run lint:remark:fix && npm run typecheck",
+        "lint:all:fix:quiet": "npm run lint:prettier:fix && npm run lint:fix && npm run typecheck",
+        "lint:fix": "npx eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
+        "lint:fix:quiet": "npx eslint --cache --cache-strategy content --cache-location .cache/.eslintcache --fix",
+        "lint:gitleaks": "gitleaks dir --config .gitleaks.toml .",
+        "lint:jscpd": "npx jscpd --config node_modules/jscpd-config-nick2bad4u/jscpd.json",
+        "lint:lychee": "lychee --config node_modules/lychee-config-nick2bad4u/lychee.toml .",
+        "lint:lychee:smoke": "lychee --config node_modules/lychee-config-nick2bad4u/lychee.toml --dump-inputs README.md",
+        "lint:package-json": "npx npmPkgJsonLint . --config .npmpackagejsonlintrc.json",
+        "lint:prettier": "npx prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --check",
+        "lint:prettier:fix": "npx prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --write",
+        "lint:remark": "npx remark . --frail --ignore-path .remarkignore",
+        "lint:remark:fix": "npx remark . --ignore-path .remarkignore --output",
+        "lint:yamllint": "yamllint -c .yamllint .",
+        "prepack": "npm run build",
+        "release:check": "npm run lint:all && npm test",
+        "repo:migrate:rolling-latest": "node ./scripts/migrate-rolling-latest.mjs",
+        "start": "node ./src/cli.ts",
+        "sync:node-version-files": "node scripts/sync-node-version-files.mjs",
+        "test": "npx vitest run --config vite.config.ts",
+        "test:ci": "npx vitest run --config vite.config.ts --coverage --reporter=github-actions --reporter=dot --reporter=junit --outputFile=test-report.junit.xml --silent",
+        "test:coverage": "npx vitest run --config vite.config.ts --coverage",
+        "typecheck": "npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.build.json --noEmit && npx tsc -p tsconfig.eslint.json --noEmit && npx tsc -p tsconfig.js.json --noEmit",
+        "update-actions": "actions-up --yes --style sha --quiet",
+        "update-all": "npm run update-actions && npm run update-deps",
+        "update-deps": "npx ncu --configFileName .ncurc.json --configFilePath node_modules/ncu-config-nick2bad4u && npx cross-env npm_config_allow_scripts= npm update --force && npm run sync:node-version-files"
+    },
+    "dependencies": {
+        "ts-extras": "^1.3.0",
+        "ttf2woff2": "^8.0.1",
+        "type-fest": "^5.8.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^26.4.0",
+        "@vitest/coverage-v8": "^4.1.11",
+        "actions-up": "^1.18.0",
+        "cross-env": "^10.1.0",
+        "eslint": "^10.9.1",
+        "eslint-config-nick2bad4u": "^14.1.3",
+        "git-cliff": "^2.13.1",
+        "gitcliff-config-nick2bad4u": "^1.5.0",
+        "gitleaks-config-nick2bad4u": "^1.0.5",
+        "globals": "^17.11.0",
+        "jscpd": "^5.0.16",
+        "jscpd-config-nick2bad4u": "^1.1.1",
+        "lychee-config-nick2bad4u": "^3.0.1",
+        "ncu-config-nick2bad4u": "^0.2.1",
+        "npm-check-updates": "^23.1.0",
+        "npm-package-json-lint": "^11.0.0",
+        "npm-package-json-lint-config-nick2bad4u": "^1.0.4",
+        "prettier": "^3.9.6",
+        "prettier-config-nick2bad4u": "^2.0.4",
+        "remark": "^15.0.1",
+        "remark-cli": "^12.0.1",
+        "remark-config-nick2bad4u": "^1.1.4",
+        "secretlint": "^13.0.5",
+        "secretlint-config-nick2bad4u": "^1.1.2",
+        "stylelint": "^17.14.1",
+        "stylelint-config-nick2bad4u": "^2.2.1",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.68.0",
+        "vitest": "^4.1.11",
+        "yamllint-config-nick2bad4u": "^1.1.1"
+    },
+    "packageManager": "npm@12.0.2",
+    "engines": {
+        "node": ">=22.22.3"
+    },
+    "devEngines": {
+        "packageManager": {
+            "name": "npm",
+            "version": "12.0.2"
+        },
+        "runtime": {
+            "name": "node",
+            "version": ">=22.22.3"
+        }
+    },
+    "publishConfig": {
+        "provenance": true,
+        "registry": "https://registry.npmjs.org"
+    },
+    "allowScripts": {
+        "core-js@3.50.0": false,
+        "esbuild@0.28.1": true,
+        "fsevents@2.3.3": true,
+        "ttf2woff2@8.0.1": true,
+        "unrs-resolver@1.12.2": true
+    }
+}

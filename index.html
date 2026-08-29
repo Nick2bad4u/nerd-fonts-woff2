@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            content="width=device-width, initial-scale=1.0"
+            name="viewport"
+        />
+        <title>nerd-fonts-woff2 index</title>
+        <script
+            async
+            src="https://www.googletagmanager.com/gtag/js?id=G-18DR1S6R1T"
+        ></script>
+        <script>
+            (function (w, d, s, l, i) {
+                w[l] = w[l] || [];
+                w[l].push({
+                    "gtm.start": Date.now(),
+                    event: "gtm.js",
+                });
+                const f = d.getElementsByTagName(s)[0];
+                const j = d.createElement(s);
+                const dl = l === "dataLayer" ? "" : "&l=" + l;
+                j.async = true;
+                j.src = "https://www.googletagmanager.com/gtm.js?id=" + i + dl;
+                f.parentNode?.insertBefore(j, f);
+            })(globalThis, document, "script", "dataLayer", "GTM-T8J6HPLF");
+        </script>
+        <script>
+            globalThis.dataLayer = globalThis.dataLayer || [];
+            function gtag() {
+                globalThis.dataLayer.push(arguments);
+            }
+            gtag("js", new Date());
+            gtag("config", "G-18DR1S6R1T");
+        </script>
+        <link
+            href="https://www.nerdfonts.com/assets/css/webfont.css"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --bg: #0b1020;
+                --popup-shadow: rgba(0, 0, 0, 0.9);
+                --bg-soft: #111a32;
+                --card: #151f3a;
+                --text: #f3f6ff;
+                --muted: #a8b5d6;
+                --accent: #5aa9ff;
+                --accent-2: #66f0c4;
+                --border: #27345a;
+                --shadow: rgba(2, 8, 24, 0.45);
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                color: var(--text);
+                background:
+                    radial-gradient(
+                        circle at top right,
+                        #1a2b57 0%,
+                        transparent 40%
+                    ),
+                    radial-gradient(
+                        circle at 20% -10%,
+                        #193d66 0%,
+                        transparent 30%
+                    ),
+                    var(--bg);
+                font-family:
+                    Inter,
+                    Segoe UI,
+                    Roboto,
+                    Helvetica,
+                    Arial,
+                    sans-serif;
+            }
+
+            .header,
+            .main {
+                max-width: 1280px;
+                margin: 0 auto;
+                padding: 1.25rem;
+            }
+
+            .hero {
+                padding: 1.5rem;
+                border: 1px solid var(--border);
+                border-radius: 1rem;
+                background: linear-gradient(
+                    145deg,
+                    rgba(33, 50, 92, 0.55),
+                    rgba(17, 26, 50, 0.9)
+                );
+                box-shadow: 0 18px 45px var(--shadow);
+            }
+
+            .hero h1 {
+                margin: 0 0 0.5rem;
+                font-size: clamp(1.6rem, 2.7vw, 2.4rem);
+                letter-spacing: 0.02em;
+            }
+
+            .hero-title {
+                display: flex;
+                align-items: center;
+                gap: 0.65rem;
+            }
+
+            .hero-logo {
+                width: 2rem;
+                height: 2rem;
+                border-radius: 0.45rem;
+                border: 1px solid var(--border);
+                background: rgba(12, 21, 48, 0.95);
+                box-shadow: 0 6px 16px var(--shadow);
+            }
+
+            .hero p {
+                margin: 0;
+                color: var(--muted);
+                max-width: 72ch;
+                line-height: 1.5;
+            }
+
+            .stats {
+                margin-top: 1rem;
+                display: flex;
+                gap: 0.75rem;
+                flex-wrap: wrap;
+            }
+
+            .stat-pill {
+                border: 1px solid var(--border);
+                background: rgba(21, 31, 58, 0.75);
+                border-radius: 999px;
+                padding: 0.35rem 0.75rem;
+                color: var(--muted);
+                font-size: 0.85rem;
+            }
+
+            .hero-icon {
+                margin-inline-end: 0.45rem;
+            }
+
+            .controls {
+                display: grid;
+                gap: 0.9rem;
+                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                margin-top: 1.25rem;
+                border: 1px solid var(--border);
+                border-radius: 0.9rem;
+                background: rgba(17, 26, 50, 0.8);
+                padding: 0.9rem;
+            }
+
+            label {
+                display: grid;
+                gap: 0.4rem;
+                color: var(--muted);
+                font-size: 0.88rem;
+            }
+
+            input,
+            select {
+                padding: 0.65rem 0.8rem;
+                border-radius: 0.5rem;
+                border: 1px solid var(--border);
+                background: var(--card);
+                color: var(--text);
+                outline: none;
+            }
+
+            input:focus,
+            select:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px rgba(90, 169, 255, 0.25);
+            }
+
+            .layout {
+                display: grid;
+                grid-template-columns: 260px 1fr;
+                gap: 1rem;
+                margin-top: 1rem;
+            }
+
+            .family-nav {
+                border: 1px solid var(--border);
+                border-radius: 0.75rem;
+                background: rgba(17, 26, 50, 0.8);
+                padding: 0.8rem;
+                max-height: 70vh;
+                overflow: auto;
+                position: sticky;
+                top: 1rem;
+            }
+
+            .family-nav h2 {
+                margin: 0 0 0.5rem;
+                font-size: 0.95rem;
+                color: var(--accent-2);
+            }
+
+            .family-nav ul {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: grid;
+                gap: 0.25rem;
+            }
+
+            .family-nav a {
+                color: var(--muted);
+                text-decoration: none;
+                font-size: 0.86rem;
+                padding: 0.28rem 0.4rem;
+                border-radius: 0.4rem;
+                display: block;
+            }
+
+            .family-nav a:hover {
+                background: rgba(90, 169, 255, 0.15);
+                color: var(--text);
+            }
+
+            .results {
+                display: grid;
+                gap: 0.9rem;
+            }
+
+            .status {
+                margin: 0.5rem 0 0;
+                color: var(--muted);
+            }
+
+            .family {
+                scroll-margin-top: 1rem;
+                border: 1px solid var(--border);
+                border-radius: 0.75rem;
+                background: rgba(21, 31, 58, 0.92);
+                overflow: hidden;
+                box-shadow: 0 8px 18px var(--shadow);
+            }
+
+            .family > summary {
+                cursor: pointer;
+                padding: 0.85rem 1rem;
+                font-weight: 700;
+                background: linear-gradient(145deg, #1b2748, #13203c);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            .files {
+                display: grid;
+                gap: 0.5rem;
+                padding: 0.75rem;
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            }
+
+            .file {
+                border: 1px solid var(--border);
+                border-radius: 0.5rem;
+                padding: 0.6rem;
+                background: rgba(16, 23, 44, 0.85);
+                display: grid;
+                gap: 0.3rem;
+            }
+
+            .file-top {
+                display: flex;
+                justify-content: space-between;
+                align-items: start;
+                gap: 0.5rem;
+            }
+
+            .file-badges {
+                display: flex;
+                gap: 0.3rem;
+                flex-wrap: wrap;
+            }
+
+            .badge {
+                font-size: 0.7rem;
+                color: var(--muted);
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                padding: 0.14rem 0.4rem;
+                background: rgba(21, 31, 58, 0.7);
+            }
+
+            .file-actions {
+                display: flex;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+                margin-top: 0.15rem;
+            }
+
+            .btn {
+                border: 1px solid var(--border);
+                background: rgba(17, 26, 50, 0.85);
+                color: var(--text);
+                border-radius: 0.45rem;
+                padding: 0.34rem 0.6rem;
+                font-size: 0.78rem;
+                text-decoration: none;
+                cursor: pointer;
+            }
+
+            .btn:hover {
+                border-color: var(--accent);
+                color: #ffffff;
+                background: rgba(34, 52, 95, 0.9);
+            }
+
+            .btn-primary {
+                border-color: rgba(102, 240, 196, 0.45);
+                background: rgba(23, 55, 72, 0.75);
+                color: #d8fff2;
+            }
+
+            .btn-primary:hover {
+                border-color: rgba(102, 240, 196, 0.75);
+                background: rgba(28, 67, 87, 0.95);
+            }
+
+            .primary-link {
+                color: var(--accent);
+                text-decoration: none;
+                font-size: 0.82rem;
+                word-break: break-all;
+            }
+
+            .primary-link:hover {
+                text-decoration: underline;
+            }
+
+            .file-name {
+                font-family: Consolas, monospace;
+                font-size: 0.85rem;
+                color: #d2e0ff;
+                overflow-wrap: anywhere;
+            }
+
+            .file a {
+                color: var(--accent);
+                text-decoration: none;
+                font-size: 0.82rem;
+                word-break: break-all;
+            }
+
+            .file a:hover {
+                text-decoration: underline;
+            }
+
+            @media (max-width: 980px) {
+                .layout {
+                    grid-template-columns: 1fr;
+                }
+
+                .family-nav {
+                    position: static;
+                    max-height: 260px;
+                }
+            }
+
+            .gtm-hidden {
+                display: none;
+                visibility: hidden;
+            }
+
+            .link-modal {
+                position: fixed;
+                inset: auto;
+                display: none;
+                z-index: 50;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                opacity: 0;
+                transform: translateY(-6px) scale(0.98);
+                transition:
+                    opacity 0.16s ease,
+                    transform 0.16s ease;
+            }
+
+            .link-modal[data-open="true"] {
+                display: block;
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+
+            .link-modal[data-open="true"]::before {
+                content: "";
+                position: fixed;
+                inset: 0;
+                background: rgba(5, 10, 22, 0.45);
+                backdrop-filter: blur(1px);
+                pointer-events: none;
+            }
+
+            .link-modal::backdrop {
+                display: none;
+            }
+
+            .link-modal-panel {
+                width: min(520px, 96vw);
+                max-height: 78vh;
+                overflow: auto;
+                border: 1px solid var(--border);
+                border-radius: 0.95rem;
+                background: linear-gradient(
+                    165deg,
+                    rgba(23, 34, 62, 0.98),
+                    rgba(13, 19, 38, 0.98)
+                );
+                box-shadow: 0 0 20px 20px var(--popup-shadow);
+                padding: 1rem;
+                backdrop-filter: blur(6px);
+            }
+
+            .link-modal-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .link-modal-head h3 {
+                margin: 0;
+                font-size: 1rem;
+                color: #eef4ff;
+                text-shadow:
+                    0 0 1px rgba(255, 255, 255, 0.9),
+                    0 0 8px rgba(11, 16, 32, 0.92);
+            }
+
+            .link-items {
+                display: grid;
+                gap: 0.55rem;
+            }
+
+            .link-item {
+                border: 1px solid var(--border);
+                border-radius: 0.6rem;
+                background: rgba(16, 23, 44, 0.82);
+                padding: 0.6rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            .link-item-label {
+                color: var(--accent-2);
+                font-size: 0.82rem;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+            }
+
+            .link-item-name {
+                color: #e7f2ff;
+            }
+
+            .link-item-code {
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                background: rgba(21, 31, 58, 0.72);
+                color: var(--muted);
+                font-size: 0.68rem;
+                padding: 0.1rem 0.35rem;
+            }
+
+            .link-item-left {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                min-width: 0;
+            }
+
+            .cdn-logo {
+                width: 1.65rem;
+                height: 1.65rem;
+                border-radius: 999px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--border);
+                background: rgba(21, 31, 58, 0.8);
+                color: #dce8ff;
+                font-size: 0.92rem;
+                line-height: 1;
+                font-weight: 700;
+                font-family: "Symbols Nerd Font", "Nerd Font", sans-serif;
+                overflow: hidden;
+                flex: 0 0 1.65rem;
+            }
+        </style>
+        <link
+            type="image/svg+xml"
+            href="./assets/woff2-favicon.svg"
+            rel="icon"
+        />
+        <meta
+            content="Searchable browser for Nerd Fonts WOFF2 assets published in this repository."
+            name="description"
+        />
+
+        <meta
+            content="nerd-fonts-woff2 browser"
+            property="og:title"
+        />
+
+        <meta
+            content="website"
+            property="og:type"
+        />
+        <meta
+            content="https://nick2bad4u.github.io/nerd-fonts-woff2/"
+            property="og:url"
+        />
+
+        <meta
+            content="https://nick2bad4u.github.io/nerd-fonts-woff2/assets/logo.png"
+            property="og:image"
+        />
+    </head>
+    <body>
+        <noscript>
+            <iframe
+                class="gtm-hidden"
+                height="0"
+                src="https://www.googletagmanager.com/ns.html?id=GTM-T8J6HPLF"
+                title="Google Tag Manager"
+                width="0"
+            ></iframe>
+        </noscript>
+
+        <header class="header">
+            <section class="hero">
+                <h1 class="hero-title">
+                    <img
+                        class="hero-logo"
+                        alt="WOFF2 logo"
+                        height="32"
+                        src="./assets/woff2-favicon.svg"
+                        width="32"
+                    />
+                    <span>
+                        <span class="hero-icon">🔤</span>
+                        nerd-fonts-woff2 browser</span
+                    >
+                </h1>
+                <p>
+                    Browse, search, and copy links for all generated WOFF2
+                    assets in this repository. Data source:
+                    <code>fonts/woff2/index.json</code>
+                    .
+                </p>
+                <div class="stats">
+                    <span
+                        id="stat_families"
+                        class="stat-pill"
+                        >🧬 Families: -</span
+                    >
+                    <span
+                        id="stat_files"
+                        class="stat-pill"
+                        >📦 Files: -</span
+                    >
+                    <span
+                        id="stat_version"
+                        class="stat-pill"
+                        >🏷️ Version: main</span
+                    >
+                    <span class="stat-pill">⚡ WOFF2 ready</span>
+                    <span class="stat-pill">🔗 Multi-CDN links</span>
+                </div>
+            </section>
+        </header>
+
+        <main class="main">
+            <section class="controls">
+                <label>
+                    Search family/file
+                    <input
+                        id="search"
+                        type="search"
+                        placeholder="JetBrainsMono or Regular"
+                    />
+                </label>
+                <label>
+                    Version/tag for CDN links
+                    <input
+                        id="version"
+                        type="text"
+                        value="main"
+                    />
+                </label>
+                <label>
+                    Style filter
+                    <select id="style_filter">
+                        <option value="all">All styles</option>
+                        <option value="regular"
+                            >Regular (non-bold/non-italic)</option
+                        >
+                        <option value="italic">Italic/Oblique</option>
+                        <option value="bold">Bold (non-italic)</option>
+                        <option value="bold-italic">Bold + Italic</option>
+                    </select>
+                </label>
+                <label>
+                    Family variant filter
+                    <select id="variant_filter">
+                        <option value="all">All variants</option>
+                        <option value="regular"
+                            >Regular (non-mono/non-propo)</option
+                        >
+                        <option value="mono">Mono</option>
+                        <option value="propo">Propo</option>
+                    </select>
+                </label>
+            </section>
+
+            <p
+                id="status"
+                class="status"
+                >Loading index...</p
+            >
+
+            <section class="layout">
+                <aside
+                    class="family-nav"
+                    aria-label="Font families navigation"
+                >
+                    <h2>Families</h2>
+                    <ul id="family_links"></ul>
+                </aside>
+
+                <section
+                    id="results"
+                    class="results"
+                    aria-live="polite"
+                ></section>
+            </section>
+        </main>
+
+        <dialog
+            id="link_modal"
+            class="link-modal"
+            aria-labelledby="link_modal_title"
+            data-open="false"
+        >
+            <section class="link-modal-panel">
+                <div class="link-modal-head">
+                    <h3 id="link_modal_title">🔗 CDN links</h3>
+                    <button
+                        id="close_link_modal"
+                        type="button"
+                        class="btn"
+                    >
+                        ✖ Close
+                    </button>
+                </div>
+                <div
+                    id="link_items"
+                    class="link-items"
+                ></div>
+            </section>
+        </dialog>
+
+        <script
+            type="module"
+            src="./assets/font-index.js"
+        ></script>
+    </body>
+</html>

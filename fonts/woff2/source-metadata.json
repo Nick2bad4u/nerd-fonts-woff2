@@ -1,0 +1,12 @@
+{
+  "archiveCount": 72,
+  "commitSha": "b894ea7803af6aade63d60a4381e006098ec9c4d",
+  "downloadedAt": "2026-08-26T23:51:48.446Z",
+  "manifestSha256": "e03d7ad54547d83f1620719cbc89b5684bc0c6fb028160640aa322b5035a63fb",
+  "planFingerprint": "401c6ce55e7c9e2b25a0e35f9ab0b9850527ed46b6e297fc70b06eda2f1d745a",
+  "sourceCount": 2252,
+  "upstreamRef": "v3.5.1",
+  "upstreamRepo": "https://github.com/ryanoasis/nerd-fonts.git",
+  "generatedAt": "2026-08-29T01:59:27.026Z",
+  "outputCount": 2252
+}
