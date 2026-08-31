@@ -965,33 +965,46 @@ describe("rolling latest publisher recovery and contracts", () => {
             ),
         });
 
-        const commands = [
-            "fonts:publish:latest",
-            "repo:migrate:rolling-latest",
-            "fonts:refresh:latest",
-        ];
-        for (const command of commands) {
-            // npm 12's PowerShell shim requires the leading separator used in
-            // our Windows docs; the POSIX entry point forwards that separator.
-            const result =
-                process.platform === "win32"
-                    ? run(
-                          nodePath.resolve(
-                              inheritedEnvironment["ProgramFiles"] ??
-                                  String.raw`C:\Program Files`,
-                              "PowerShell",
-                              "7",
-                              "pwsh.exe"
-                          ),
-                          [
-                              "-NoLogo",
-                              "-NoProfile",
-                              "-NonInteractive",
-                              "-Command",
-                              `& npm run -- ${command} -- --help; $exitCode = $LASTEXITCODE; exit $exitCode`,
-                          ]
-                      )
-                    : run("npm", ["run", command, "--", "--help"]);
+        const commands = new Map([
+            ["fonts:publish:latest", "Publish the rolling latest"],
+            ["fonts:refresh:latest", "Refresh, verify, commit"],
+            ["repo:migrate:rolling-latest", "Migrate to source"],
+        ]);
+        for (const [command, expectedHelp] of commands) {
+            let result;
+            if (process.platform === "win32") {
+                const powerShell = nodePath.resolve(
+                    inheritedEnvironment["ProgramFiles"] ??
+                        String.raw`C:\Program Files`,
+                    "PowerShell",
+                    "7",
+                    "pwsh.exe"
+                );
+                const runPowerShellNpm = (useLeadingSeparator: boolean) =>
+                    run(powerShell, [
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        `& npm run ${useLeadingSeparator ? "-- " : ""}${command} -- --help; $exitCode = $LASTEXITCODE; exit $exitCode`,
+                    ]);
+
+                // This workstation's npm.ps1 shim requires the documented
+                // leading separator; clean npm 12 shims forward it instead.
+                result = runPowerShellNpm(true);
+                if (
+                    result.status !== 0 ||
+                    !result.stdout.includes(expectedHelp)
+                ) {
+                    result = runPowerShellNpm(false);
+                }
+            } else {
+                result = run("npm", ["run", command, "--", "--help"]);
+            }
+
+            if (!result.stdout.includes(expectedHelp)) {
+                throw new Error(result.stderr || result.stdout);
+            }
 
             expectSuccess(result);
         }
