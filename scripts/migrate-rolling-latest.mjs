@@ -460,6 +460,12 @@ async function verifyFilteredSource(
             }
         );
     }
+    const npmEnvironment = { ...process.env };
+    for (const name of Object.keys(npmEnvironment)) {
+        if (name.toLowerCase() === "npm_config_allow_scripts") {
+            Reflect.deleteProperty(npmEnvironment, name);
+        }
+    }
     const gateRoot = resolve(migrationRoot, "source-gate");
     assertSafeRepositoryPath(repoRoot, gateRoot);
     removeTree(gateRoot);
@@ -487,7 +493,7 @@ async function verifyFilteredSource(
                 "ci",
                 "--ignore-scripts",
             ],
-            { cwd: gateRoot, mode }
+            { cwd: gateRoot, env: npmEnvironment, mode }
         );
         for (const gate of [
             "build",
@@ -505,6 +511,7 @@ async function verifyFilteredSource(
                 ],
                 {
                     cwd: gateRoot,
+                    env: npmEnvironment,
                     mode,
                 }
             );
@@ -776,12 +783,17 @@ function sha256LargeFile(path) {
 /**
  * @param {string} command
  * @param {readonly string[]} argumentsList
- * @param {{ cwd?: string; mode?: "interactive" | "json" }} [options]
+ * @param {{
+ *     cwd?: string;
+ *     env?: NodeJS.ProcessEnv;
+ *     mode?: "interactive" | "json";
+ * }} [options]
  */
 async function runLongCommand(command, argumentsList, options = {}) {
     return runCommand(command, argumentsList, {
         absoluteTimeoutMs: 3 * 60 * 60 * 1000,
         cwd: options.cwd ?? repoRoot,
+        ...(options.env === undefined ? {} : { env: options.env }),
         mode: options.mode ?? "interactive",
     });
 }
