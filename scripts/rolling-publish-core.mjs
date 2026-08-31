@@ -33,6 +33,7 @@ export const MAX_ESTIMATED_PACK_BYTES = 1_500_000_000;
 export const MAX_GITHUB_OBJECT_BYTES = 100_000_000;
 export const DEFAULT_PUSH_DELAY_MS = 10_000;
 export const DEFAULT_GITHUB_TREE_WRITE_DELAY_MS = 1_100;
+export const MAX_GITHUB_TREE_ENTRIES_PER_WRITE = 100;
 
 const GIT_MAX_BUFFER_BYTES = 128 * 1024 * 1024;
 const GIT_PROBE_TIMEOUT_MS = 30_000;
@@ -1510,6 +1511,7 @@ async function runGitHubApi(context, repository, endpoint, body, requestFile) {
  * @param {Record<string, unknown>[]} objects
  * @param {{
  *     delayBetweenTreeWritesMs?: number;
+ *     maxEntriesPerTreeWrite?: number;
  *     onProgress?: (message: string) => void;
  *     request: (
  *         endpoint: string,
@@ -1606,6 +1608,19 @@ export async function stageWoff2TreeHierarchy(objects, options) {
     const writeDelay =
         options.delayBetweenTreeWritesMs ?? DEFAULT_GITHUB_TREE_WRITE_DELAY_MS;
     const progress = options.onProgress ?? (() => {});
+    const maxEntriesPerWrite =
+        options.maxEntriesPerTreeWrite ?? MAX_GITHUB_TREE_ENTRIES_PER_WRITE;
+    if (!Number.isSafeInteger(maxEntriesPerWrite) || maxEntriesPerWrite < 1) {
+        throw new PublicationError(
+            "The Git tree write entry limit must be a positive safe integer.",
+            {
+                category: "usage",
+                code: "INVALID_TREE_WRITE_LIMIT",
+                exitCode: 2,
+                phase: "stage-final",
+            }
+        );
+    }
     let writeCount = 0;
     let previousWriteAt = 0;
     /**
@@ -1645,37 +1660,67 @@ export async function stageWoff2TreeHierarchy(objects, options) {
         for (const [, blob] of sortEntries([...node.blobs.entries()])) {
             entries.push(blob);
         }
-        const elapsed = Date.now() - previousWriteAt;
-        if (previousWriteAt > 0 && elapsed < writeDelay) {
-            await sleep(writeDelay - elapsed);
+        const parts = [];
+        for (
+            let offset = 0;
+            offset < entries.length;
+            offset += maxEntriesPerWrite
+        ) {
+            parts.push(entries.slice(offset, offset + maxEntriesPerWrite));
         }
-        writeCount += 1;
-        progress(
-            `Staging Git tree ${String(writeCount)} for ${directoryPath} (${String(entries.length)} entries).`
-        );
-        const requestName = `github-tree-${createHash("sha256")
-            .update(directoryPath)
-            .digest("hex")
-            .slice(0, 16)}.json`;
-        const response = await options.request(
-            "git/trees",
-            { tree: entries },
-            requestName
-        );
-        previousWriteAt = Date.now();
-        const sha = response["sha"];
-        if (typeof sha !== "string" || !/^[\da-f]{40}$/u.test(sha)) {
+        let treeSha;
+        for (const [partIndex, part] of parts.entries()) {
+            const elapsed = Date.now() - previousWriteAt;
+            if (previousWriteAt > 0 && elapsed < writeDelay) {
+                await sleep(writeDelay - elapsed);
+            }
+            writeCount += 1;
+            const partDescription =
+                parts.length === 1
+                    ? ""
+                    : ` part ${String(partIndex + 1)}/${String(parts.length)}`;
+            progress(
+                `Staging Git tree ${String(writeCount)} for ${directoryPath}${partDescription} (${String(part.length)} entries).`
+            );
+            const requestName = `github-tree-${createHash("sha256")
+                .update(directoryPath)
+                .digest("hex")
+                .slice(0, 16)}-${String(partIndex + 1).padStart(4, "0")}.json`;
+            const response = await options.request(
+                "git/trees",
+                {
+                    ...(treeSha === undefined ? {} : { base_tree: treeSha }),
+                    tree: part,
+                },
+                requestName
+            );
+            previousWriteAt = Date.now();
+            const sha = response["sha"];
+            if (typeof sha !== "string" || !/^[\da-f]{40}$/u.test(sha)) {
+                throw new PublicationError(
+                    `GitHub returned an invalid tree SHA for ${directoryPath}.`,
+                    {
+                        category: "verification",
+                        code: "INVALID_GITHUB_TREE_RESPONSE",
+                        exitCode: 7,
+                        phase: "stage-final",
+                    }
+                );
+            }
+            treeSha = sha;
+        }
+        if (treeSha === undefined) {
             throw new PublicationError(
-                `GitHub returned an invalid tree SHA for ${directoryPath}.`,
+                `Cannot stage an empty Git tree for ${directoryPath}.`,
                 {
                     category: "verification",
-                    code: "INVALID_GITHUB_TREE_RESPONSE",
+                    code: "EMPTY_GITHUB_TREE_REQUEST",
                     exitCode: 7,
                     phase: "stage-final",
                 }
             );
         }
-        return sha;
+        return treeSha;
     };
 
     return materialize(root, "fonts/woff2");
@@ -1692,6 +1737,7 @@ export async function stageWoff2TreeHierarchy(objects, options) {
  * @param {string} stateRoot
  * @param {{
  *     delayBetweenTreeWritesMs?: number;
+ *     maxEntriesPerTreeWrite?: number;
  *     onProgress?: (message: string) => void;
  *     request?: (
  *         endpoint: string,
@@ -1742,6 +1788,9 @@ export async function stageFinalCommitOnGitHub(
         ...(options.onProgress === undefined
             ? {}
             : { onProgress: options.onProgress }),
+        ...(options.maxEntriesPerTreeWrite === undefined
+            ? {}
+            : { maxEntriesPerTreeWrite: options.maxEntriesPerTreeWrite }),
         request,
         ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
     });

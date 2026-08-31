@@ -502,7 +502,7 @@ describe("rolling latest publisher", () => {
     }, 30_000);
 
     it("stages the WOFF2 hierarchy through bounded directory trees", () => {
-        expect.assertions(8);
+        expect.assertions(9);
 
         const result = runInlineModule(
             `
@@ -521,6 +521,7 @@ describe("rolling latest publisher", () => {
                 ];
                 const tree = await stageWoff2TreeHierarchy(objects, {
                     delayBetweenTreeWritesMs: 0,
+                    maxEntriesPerTreeWrite: 1,
                     onProgress: (message) => progress.push(message),
                     request,
                 });
@@ -549,35 +550,39 @@ describe("rolling latest publisher", () => {
             duplicateCode: string;
             progress: string[];
             requests: Array<{
-                body: { tree: Array<{ path: string; type: string }> };
+                body: {
+                    base_tree?: string;
+                    tree: Array<{ path: string; type: string }>;
+                };
                 endpoint: string;
                 requestName: string;
             }>;
             tree: string;
         };
 
-        expect(output.requests).toHaveLength(3);
-        expect(output.requests.map(({ endpoint }) => endpoint)).toStrictEqual([
-            "git/trees",
-            "git/trees",
-            "git/trees",
-        ]);
+        expect(output.requests).toHaveLength(6);
+        expect(
+            output.requests.every(({ body }) => body.tree.length === 1)
+        ).toBe(true);
         expect(
             output.requests
-                .slice(0, 2)
+                .slice(0, 3)
                 .flatMap(({ body }) => body.tree.map(({ path }) => path))
         ).toStrictEqual([
             "Bold.woff2",
             "Regular.woff2",
             "Beta.woff2",
         ]);
-        expect(output.requests[2]?.body.tree).toMatchObject([
+        expect(
+            output.requests.slice(3).flatMap(({ body }) => body.tree)
+        ).toMatchObject([
             { path: "Alpha", type: "tree" },
             { path: "Beta", type: "tree" },
             { path: "index.json", type: "blob" },
         ]);
-        expect(output.progress).toHaveLength(3);
-        expect(output.tree).toBe("3".padStart(40, "0"));
+        expect(output.requests[1]?.body.base_tree).toBe("1".padStart(40, "0"));
+        expect(output.progress).toHaveLength(6);
+        expect(output.tree).toBe("6".padStart(40, "0"));
         expect(output.duplicateCode).toBe("CATALOG_PATH_CONFLICT");
     });
 
