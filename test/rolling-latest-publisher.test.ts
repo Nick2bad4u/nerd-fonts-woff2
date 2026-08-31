@@ -500,7 +500,9 @@ describe("rolling latest publisher", () => {
         );
         expect(output.temporaryRefs).toBe("");
     }, 30_000);
+});
 
+describe("github distribution tree staging", () => {
     it("stages the WOFF2 hierarchy through bounded directory trees", () => {
         expect.assertions(9);
 
@@ -586,6 +588,85 @@ describe("rolling latest publisher", () => {
         expect(output.duplicateCode).toBe("CATALOG_PATH_CONFLICT");
     });
 
+    it("preserves the reviewed terminal newline in the GitHub commit", () => {
+        expect.assertions(5);
+
+        const result = runInlineModule(
+            `
+                import { stageFinalCommitOnGitHub } from ${JSON.stringify(coreUrl)};
+                const treeShas = ["1".repeat(40), "2".repeat(40), "3".repeat(40)];
+                let treeIndex = 0;
+                let commitBody = null;
+                const request = async (endpoint, body) => {
+                    if (endpoint === "git/trees") {
+                        return { sha: treeShas[treeIndex++] };
+                    }
+                    if (endpoint === "git/commits") {
+                        commitBody = body;
+                        return { sha: "4".repeat(40) };
+                    }
+                    return { ref: "refs/heads/upload/font-catalog/test/final" };
+                };
+                const plan = {
+                    catalog: { fontTree: "2".repeat(40) },
+                    chunks: [{ objects: [
+                        {
+                            mode: "100644",
+                            objectId: "a".repeat(40),
+                            path: "fonts/woff2/Alpha/Alpha.woff2",
+                        },
+                        {
+                            mode: "100644",
+                            objectId: "b".repeat(40),
+                            path: "fonts/woff2/index.json",
+                        },
+                    ] }],
+                    commitIdentity: {
+                        date: "2026-08-31T00:00:00Z",
+                        email: "publisher@example.invalid",
+                        name: "publisher",
+                    },
+                    distributionTree: "3".repeat(40),
+                    finalCommit: "4".repeat(40),
+                    finalCommitMessage: "reviewed message",
+                    finalRef: "refs/heads/upload/font-catalog/test/final",
+                    remote: "origin",
+                    repository: "example/rolling-fonts",
+                    sourceTree: "c".repeat(40),
+                };
+                await stageFinalCommitOnGitHub(
+                    plan,
+                    { repoRoot: ${JSON.stringify(repoRoot)} },
+                    ${JSON.stringify(repoRoot)},
+                    {
+                        delayBetweenTreeWritesMs: 0,
+                        request,
+                    }
+                );
+                process.stdout.write(JSON.stringify({ commitBody, treeIndex }));
+            `,
+            repoRoot
+        );
+
+        expectSuccess(result);
+
+        const output = JSON.parse(result.stdout) as {
+            commitBody: {
+                message: string;
+                parents: string[];
+                tree: string;
+            };
+            treeIndex: number;
+        };
+
+        expect(output.treeIndex).toBe(3);
+        expect(output.commitBody.message).toBe("reviewed message\n");
+        expect(output.commitBody.parents).toStrictEqual([]);
+        expect(output.commitBody.tree).toBe("3".repeat(40));
+    });
+});
+
+describe("rolling latest publisher recovery and contracts", () => {
     it("detects font-bearing source history and accepts a clean orphan replacement", () => {
         expect.assertions(4);
 

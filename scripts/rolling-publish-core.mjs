@@ -1840,7 +1840,10 @@ export async function stageFinalCommitOnGitHub(
         {
             author: commitIdentity,
             committer: commitIdentity,
-            message: String(plan["finalCommitMessage"]),
+            // `git commit-tree` writes the reviewed commit with one terminal
+            // LF. GitHub otherwise preserves the API string without that LF,
+            // producing a different object ID from the reviewed commit.
+            message: `${String(plan["finalCommitMessage"])}\n`,
             parents: [],
             tree: String(plan["distributionTree"]),
         },
