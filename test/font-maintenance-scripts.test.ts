@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import * as nodePath from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // eslint-disable-next-line unicorn/prefer-import-meta-properties -- Node support lint rejects import.meta.dirname for the configured range.
 const testDirectory = nodePath.dirname(fileURLToPath(import.meta.url));
@@ -33,7 +33,8 @@ const mockConversionWorkerUrl = pathToFileURL(
         "mock-font-conversion-worker.mjs"
     )
 ).href;
-const processPoolIntegrationTimeoutMs = 15_000;
+const scriptIntegrationTimeoutMs = 15_000;
+vi.setConfig({ testTimeout: scriptIntegrationTimeoutMs });
 
 function runInlineModule(source: string): {
     status: null | number;
@@ -627,7 +628,7 @@ describe("font maintenance script safety", () => {
                 expect.stringMatching(/^total /v),
             ])
         );
-    }, processPoolIntegrationTimeoutMs);
+    });
 
     it("runs up to the configured process-pool concurrency", () => {
         expect.assertions(10);
@@ -681,7 +682,7 @@ describe("font maintenance script safety", () => {
             output.first.timings.workerId,
             output.second.timings.workerId,
         ]).toContain(output.third.timings.workerId);
-    }, processPoolIntegrationTimeoutMs);
+    });
 
     it("replaces timed-out and crashed conversion processes", () => {
         expect.assertions(20);
@@ -775,7 +776,7 @@ describe("font maintenance script safety", () => {
             output.malformed.timings.workerId
         );
         expect(output.afterMalformed.timings.workerReused).toBe(false);
-    }, processPoolIntegrationTimeoutMs);
+    });
 
     it("closes active conversion processes and refuses later jobs", () => {
         expect.assertions(8);
@@ -815,7 +816,7 @@ describe("font maintenance script safety", () => {
         expect(output.afterClose.ok).toBe(false);
         expect(output.afterClose.error).toContain("worker pool is closed");
         expect(output.afterClose.timings.workerId).toBe(0);
-    }, processPoolIntegrationTimeoutMs);
+    });
 
     it("rejects repository traversal in public verification paths", () => {
         expect.assertions(3);
