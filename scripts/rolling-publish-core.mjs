@@ -27,7 +27,7 @@ import {
     removeTree,
 } from "./safe-filesystem.mjs";
 
-export const PUBLISH_SCHEMA_VERSION = 1;
+export const PUBLISH_SCHEMA_VERSION = 2;
 export const DEFAULT_CHUNK_TARGET_BYTES = 1_250_000_000;
 export const MAX_ESTIMATED_PACK_BYTES = 1_500_000_000;
 export const MAX_GITHUB_OBJECT_BYTES = 100_000_000;
@@ -37,6 +37,18 @@ const GIT_MAX_BUFFER_BYTES = 128 * 1024 * 1024;
 const GIT_PROBE_TIMEOUT_MS = 30_000;
 const LOCK_SCHEMA_VERSION = 1;
 const LOCK_STALE_AFTER_MS = 15 * 60 * 1_000;
+
+function githubCliEnvironment() {
+    const environment = { ...process.env };
+    if (
+        environment["GH_TOKEN"] === undefined &&
+        environment["GITHUB_TOKEN"] !== undefined
+    ) {
+        environment["GH_TOKEN"] = environment["GITHUB_TOKEN"];
+    }
+    Reflect.deleteProperty(environment, "GITHUB_TOKEN");
+    return environment;
+}
 
 /** @param {unknown} value @returns {unknown} */
 function canonicalize(value) {
@@ -825,6 +837,10 @@ export function buildPublicationPlan(context, options) {
         "rev-parse",
         `${options.sourceCommit}^{commit}`,
     ]);
+    const sourceTree = runGitCapture(context, [
+        "rev-parse",
+        `${sourceCommit}^{tree}`,
+    ]);
     const expectedMainCommit =
         options.expectedMainCommit === undefined
             ? resolveRemoteRef(context, remote, "refs/heads/main")
@@ -1015,12 +1031,19 @@ export function buildPublicationPlan(context, options) {
         schemaVersion: PUBLISH_SCHEMA_VERSION,
         sourceBranch,
         sourceCommit,
+        sourceTree,
     };
     const artifactFingerprint = calculateArtifactFingerprint(artifactIdentity);
+    const commitIdentity = {
+        date: generatedAt,
+        email: "20943337+Nick2bad4u@users.noreply.github.com",
+        name: "nerd-fonts-woff2 publisher",
+    };
+    const finalCommitMessage = `Publish rolling Nerd Fonts catalog ${String(Reflect.get(metadata, "upstreamRef"))}\n\nSource-Commit: ${sourceCommit}\nUpstream-Commit: ${String(Reflect.get(metadata, "commitSha"))}\nUpstream-Plan-Fingerprint: ${String(Reflect.get(metadata, "planFingerprint"))}\nFont-Tree: ${fontTree}\nPublication-Artifact-Fingerprint: ${artifactFingerprint}`;
     const finalCommit = createParentlessCommit(
         context,
         distributionTree,
-        `Publish rolling Nerd Fonts catalog ${String(Reflect.get(metadata, "upstreamRef"))}\n\nSource-Commit: ${sourceCommit}\nUpstream-Commit: ${String(Reflect.get(metadata, "commitSha"))}\nUpstream-Plan-Fingerprint: ${String(Reflect.get(metadata, "planFingerprint"))}\nFont-Tree: ${fontTree}\nPublication-Artifact-Fingerprint: ${artifactFingerprint}`,
+        finalCommitMessage,
         generatedAt
     );
     const finalCommitBody = runGitCapture(context, [
@@ -1047,15 +1070,19 @@ export function buildPublicationPlan(context, options) {
             ref: `refs/heads/upload/font-catalog/${artifactFingerprint}/chunk-${String(chunk.number).padStart(4, "0")}`,
         })),
         createdFromGeneratedAt: generatedAt,
+        commitIdentity,
         distributionTree,
         expectedMainCommit,
         finalCommit,
+        finalCommitMessage,
+        finalRef: `refs/heads/upload/font-catalog/${artifactFingerprint}/final`,
         remote,
         remoteUrl,
         repository,
         schemaVersion: PUBLISH_SCHEMA_VERSION,
         sourceBranch,
         sourceCommit,
+        sourceTree,
         transactionNonce: artifactFingerprint.slice(0, 24),
     };
     return {
@@ -1395,6 +1422,160 @@ export async function verifyPublishedSnapshot(
 }
 
 /**
+ * @param {GitContext} context
+ * @param {string} repository
+ * @param {string} endpoint
+ * @param {Record<string, unknown>} body
+ * @param {string} requestFile
+ */
+async function runGitHubApi(
+    context,
+    repository,
+    endpoint,
+    body,
+    requestFile
+) {
+    await atomicWriteJson(requestFile, body);
+    try {
+        const result = await runCommand(
+            "gh",
+            [
+                "api",
+                `repos/${repository}/${endpoint}`,
+                "--method",
+                "POST",
+                "--input",
+                requestFile,
+                "--header",
+                "Accept: application/vnd.github+json",
+                "--header",
+                "X-GitHub-Api-Version: 2026-03-10",
+            ],
+            {
+                absoluteTimeoutMs: 2 * 60 * 1_000,
+                cwd: context.repoRoot,
+                env: githubCliEnvironment(),
+                maxTailBytes: 16 * 1024 * 1024,
+                mode: "capture",
+            }
+        );
+        return /** @type {Record<string, unknown>} */ (
+            JSON.parse(result.stdout)
+        );
+    } catch (error) {
+        throw new PublicationError(
+            `GitHub Git database request failed for ${endpoint}: ${
+                error instanceof Error ? error.message : String(error)
+            }`,
+            {
+                category: "network",
+                cause: error,
+                code: "GITHUB_OBJECT_STAGE_FAILED",
+                exitCode: 5,
+                phase: "stage-final",
+            }
+        );
+    } finally {
+        rmSync(requestFile, { force: true });
+    }
+}
+
+/**
+ * Materialize the reviewed distribution tree and root commit from Git objects
+ * already made reachable by `source` and the chunk refs. The temporary final
+ * ref lets the subsequent Git push update `main` with an atomic lease without
+ * repacking every WOFF2 blob from unrelated parentless chunk commits.
+ *
+ * @param {Record<string, unknown>} plan
+ * @param {GitContext} context
+ * @param {string} stateRoot
+ */
+export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
+    const repository = String(plan["repository"]);
+    const finalCommit = String(plan["finalCommit"]);
+    const finalRef = String(plan["finalRef"]);
+    const objects = /** @type {Record<string, unknown>[]} */ (
+        /** @type {Record<string, unknown>[]} */ (plan["chunks"])
+            .flatMap((chunk) =>
+                /** @type {Record<string, unknown>[]} */ (chunk["objects"])
+            )
+            .map((entry) => ({
+                mode: String(entry["mode"]),
+                path: String(entry["path"]),
+                sha: String(entry["objectId"]),
+                type: "blob",
+            }))
+    );
+    const treeResponse = await runGitHubApi(
+        context,
+        repository,
+        "git/trees",
+        {
+            base_tree: String(plan["sourceTree"]),
+            tree: objects,
+        },
+        resolve(stateRoot, "github-tree-request.json")
+    );
+    if (treeResponse["sha"] !== plan["distributionTree"]) {
+        throw new PublicationError(
+            "GitHub did not reproduce the reviewed distribution tree.",
+            {
+                category: "verification",
+                code: "GITHUB_TREE_MISMATCH",
+                exitCode: 7,
+                phase: "stage-final",
+            }
+        );
+    }
+    const commitIdentity = /** @type {Record<string, unknown>} */ (
+        plan["commitIdentity"]
+    );
+    const commitResponse = await runGitHubApi(
+        context,
+        repository,
+        "git/commits",
+        {
+            author: commitIdentity,
+            committer: commitIdentity,
+            message: String(plan["finalCommitMessage"]),
+            parents: [],
+            tree: String(plan["distributionTree"]),
+        },
+        resolve(stateRoot, "github-commit-request.json")
+    );
+    if (commitResponse["sha"] !== finalCommit) {
+        throw new PublicationError(
+            `GitHub created ${String(commitResponse["sha"])} instead of the reviewed root commit ${finalCommit}.`,
+            {
+                category: "verification",
+                code: "GITHUB_COMMIT_MISMATCH",
+                exitCode: 7,
+                phase: "stage-final",
+            }
+        );
+    }
+    try {
+        await runGitHubApi(
+            context,
+            repository,
+            "git/refs",
+            { ref: finalRef, sha: finalCommit },
+            resolve(stateRoot, "github-ref-request.json")
+        );
+    } catch (error) {
+        if (
+            resolveRemoteRef(
+                context,
+                String(plan["remote"]),
+                finalRef
+            ) !== finalCommit
+        ) {
+            throw error;
+        }
+    }
+}
+
+/**
  * @param {Record<string, unknown>} plan
  * @param {{
  *     context: GitContext;
@@ -1405,6 +1586,13 @@ export async function verifyPublishedSnapshot(
  *     onWarning?: (message: string) => void;
  *     pushDelayMs?: number;
  *     sleep?: (milliseconds: number) => Promise<void>;
+ *     stageFinalCommit?: (details: {
+ *         context: GitContext;
+ *         finalCommit: string;
+ *         finalRef: string;
+ *         plan: Record<string, unknown>;
+ *         stateRoot: string;
+ *     }) => Promise<void>;
  *     verifyRemote?: boolean;
  * }} options
  */
@@ -1554,6 +1742,66 @@ export async function publishPublicationPlan(plan, options) {
             }
         }
 
+        const finalRef = String(plan["finalRef"]);
+        if (!mainInstalled) {
+            const stagedFinalCommit = resolveRemoteRef(
+                context,
+                remote,
+                finalRef
+            );
+            if (stagedFinalCommit !== null && stagedFinalCommit !== finalCommit) {
+                throw new PublicationError(
+                    `Remote final staging ref has unexpected ownership: ${finalRef}`,
+                    {
+                        category: "repository",
+                        code: "FINAL_REF_CONFLICT",
+                        exitCode: 3,
+                        phase: "stage-final",
+                    }
+                );
+            }
+            if (stagedFinalCommit === null) {
+                progress(
+                    "Materializing the reviewed root commit from seeded Git objects."
+                );
+                const stageFinalCommit =
+                    options.stageFinalCommit ??
+                    (async () =>
+                        stageFinalCommitOnGitHub(plan, context, stateRoot));
+                await stageFinalCommit({
+                    context,
+                    finalCommit,
+                    finalRef,
+                    plan,
+                    stateRoot,
+                });
+            } else {
+                progress("Reviewed root commit is already staged remotely.");
+            }
+            if (
+                resolveRemoteRef(context, remote, finalRef) !== finalCommit
+            ) {
+                throw new PublicationError(
+                    "Remote final staging ref does not match the reviewed root commit.",
+                    {
+                        category: "verification",
+                        code: "FINAL_REF_VERIFY_FAILED",
+                        exitCode: 7,
+                        phase: "stage-final",
+                    }
+                );
+            }
+            const uploadedRefs = new Set(
+                Array.isArray(state["uploadedRefs"])
+                    ? /** @type {string[]} */ (state["uploadedRefs"])
+                    : []
+            );
+            uploadedRefs.add(finalRef);
+            state["uploadedRefs"] = [...uploadedRefs];
+            state["phase"] = "final-staged";
+            await atomicWriteJson(stateFile, state);
+        }
+
         if (!mainInstalled) {
             if (
                 resolveRemoteRef(context, remote, "refs/heads/main") !==
@@ -1651,14 +1899,20 @@ export async function publishPublicationPlan(plan, options) {
             }
         }
 
-        const seedBranches = chunks.flatMap((chunk) => {
-            const ref = String(chunk["ref"]);
-            const expectedCommit = String(chunk["commitId"]);
+        const temporaryBranches = [
+            ...chunks.map((chunk) => ({
+                commitId: String(chunk["commitId"]),
+                ref: String(chunk["ref"]),
+            })),
+            { commitId: finalCommit, ref: finalRef },
+        ].flatMap((temporaryRef) => {
+            const ref = temporaryRef.ref;
+            const expectedCommit = temporaryRef.commitId;
             const remoteCommit = resolveRemoteRef(context, remote, ref);
             if (remoteCommit === null) return [];
             if (remoteCommit !== expectedCommit) {
                 throw new PublicationError(
-                    `Refusing to delete a seed ref owned by another transaction: ${ref}`,
+                    `Refusing to delete a temporary ref owned by another transaction: ${ref}`,
                     {
                         category: "repository",
                         cleanupPending: true,
@@ -1671,12 +1925,16 @@ export async function publishPublicationPlan(plan, options) {
             }
             return [ref.replace(/^refs\/heads\//u, "")];
         });
-        if (seedBranches.length > 0) {
-            progress("Removing temporary remote seed branches.");
+        if (temporaryBranches.length > 0) {
+            progress("Removing temporary remote publication branches.");
             try {
                 await runStreamingGit(
                     context,
-                    scopedPushArguments(remote, "--delete", ...seedBranches),
+                    scopedPushArguments(
+                        remote,
+                        "--delete",
+                        ...temporaryBranches
+                    ),
                     {
                         mode: options.mode ?? "interactive",
                         phase: "seed-cleanup",

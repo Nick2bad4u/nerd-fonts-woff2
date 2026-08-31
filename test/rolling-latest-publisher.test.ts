@@ -262,7 +262,7 @@ describe("rolling latest publisher", () => {
     });
 
     it("publishes parentless chunks locally, resumes cleanup, and protects main with a lease", () => {
-        expect.assertions(11);
+        expect.assertions(12);
 
         const fixture = createFixtureRepository();
         const sourceTreeish = JSON.stringify(
@@ -296,10 +296,23 @@ describe("rolling latest publisher", () => {
                 runGitCapture(context, [
                     "config", "remote.origin.mirror", "true",
                 ]);
+                const stageFinalCommit = async ({ finalCommit, finalRef }) => {
+                    const remoteContext = {
+                        gitDir: ${JSON.stringify(fixture.remote)},
+                        repoRoot: ${JSON.stringify(fixture.source)},
+                    };
+                    runGitCapture(remoteContext, [
+                        "fetch", ${JSON.stringify(fixture.source)}, finalCommit,
+                    ]);
+                    runGitCapture(remoteContext, [
+                        "update-ref", finalRef, finalCommit,
+                    ]);
+                };
                 const first = await publishPublicationPlan(plan, {
                     context,
                     mode: "json",
                     pushDelayMs: 0,
+                    stageFinalCommit,
                     verifyRemote: false,
                 });
                 const installedMain = runGitCapture(context, [
@@ -400,6 +413,7 @@ describe("rolling latest publisher", () => {
             ).every((chunk) => chunk.measuredPackBytes > 0)
         ).toBe(true);
         expect(output.commitBody).not.toMatch(/^parent /mv);
+        expect(output.plan["finalRef"]).toMatch(/\/final$/v);
         expect(output.installedMain).toBe(output.plan["finalCommit"]);
         expect(output.first).toMatchObject({ status: "published" });
         expect(output.seedsAfterSuccess).toBe("");
