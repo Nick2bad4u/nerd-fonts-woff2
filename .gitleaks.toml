@@ -2,7 +2,7 @@
 # Modern configuration following Gitleaks v8.28+ best practices with latest rules
 # See: https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
 "$schema" = "https://raw.githubusercontent.com/Nick2bad4u/Uptime-Watcher/refs/heads/main/config/schemas/generic.schema.json"
-title     = "Uptime Watcher - Enhanced Secret Detection Configuration"
+title = "Uptime Watcher - Enhanced Secret Detection Configuration"
 
 # Extend the shared Gitleaks configuration, which includes the default rules
 # and the repository-wide policy.
@@ -14,118 +14,118 @@ title     = "Uptime Watcher - Enhanced Secret Detection Configuration"
 # - Service-specific secrets
 # - New AI platform keys (OpenAI, Anthropic, etc.)
 [extend]
-    path = "node_modules/gitleaks-config-nick2bad4u/gitleaks.toml"
+path = "node_modules/gitleaks-config-nick2bad4u/gitleaks.toml"
 
-    # Performance optimizations enabled by default in v8.28+
-    # - Stopword optimization (promoted from experimental)
-    # - Fragment newline calculation optimization
-    # - Enhanced allowlist processing
+# Performance optimizations enabled by default in v8.28+
+# - Stopword optimization (promoted from experimental)
+# - Fragment newline calculation optimization
+# - Enhanced allowlist processing
 
 # Global allowlists for generated artifacts and known-safe files.
 [[allowlists]]
-    description = "Ignore generated TypeDoc JSON output"
-    paths       = [
-        '''^docs/typedoc\.json$''',
-    ]
+description = "Ignore generated TypeDoc JSON output"
+paths = [
+  '''^docs/typedoc\.json$''',
+]
 
 # Custom rules for project-specific patterns
 [[rules]]
-    id          = "electron-config-secrets"
-    description = "Detect hardcoded secrets in Electron configuration files"
-    regex       = '''(?i)(electron[_-]?(?:secret|key|token|password|credential))\s*[:=]\s*["']?([a-zA-Z0-9]{16,})["']?'''
-    secretGroup = 2
-    keywords    = [
-        "electron",
-        "key",
-        "password",
-        "secret",
-        "token",
-    ]
-    tags        = [
-        "configuration",
-        "electron",
-        "secrets",
-    ]
+id = "electron-config-secrets"
+description = "Detect hardcoded secrets in Electron configuration files"
+regex = '''(?i)(electron[_-]?(?:secret|key|token|password|credential))\s*[:=]\s*["']?([a-zA-Z0-9]{16,})["']?'''
+secretGroup = 2
+keywords = [
+  "electron",
+  "key",
+  "password",
+  "secret",
+  "token",
+]
+tags = [
+  "configuration",
+  "electron",
+  "secrets",
+]
 
-    [[rules.allowlists]]
-        description = "Allow example values in documentation"
-        paths       = [ '''docs/.*\.(md|txt|rst)$''' ]
-        regexTarget = "secret"
-        regexes     = [ '''(?i)(example|demo|placeholder|test|sample)''' ]
-
-[[rules]]
-    id          = "database-connection-strings"
-    description = "Detect database connection strings with embedded credentials"
-    regex       = '''(?i)(database_url|db_url|connection_string)\s*[:=]\s*["']?([^"'\s]+://[^"'\s]*:[^"'\s]*@[^"'\s]+)["']?'''
-    secretGroup = 2
-    keywords    = [
-        "connection",
-        "database",
-        "db",
-        "url",
-    ]
-    tags        = [
-        "connection-string",
-        "credentials",
-        "database",
-    ]
-
-    [[rules.allowlists]]
-        description = "Allow example connection strings in documentation"
-        paths       = [ '''docs/.*\.(md|txt|rst)$''' ]
-        regexTarget = "secret"
-        regexes     = [ '''(?i)(example|localhost|127\.0\.0\.1|test|demo)''' ]
+[[rules.allowlists]]
+description = "Allow example values in documentation"
+paths = ['''docs/.*\.(md|txt|rst)$''']
+regexTarget = "secret"
+regexes = ['''(?i)(example|demo|placeholder|test|sample)''']
 
 [[rules]]
-    id          = "vite-env-secrets"
-    description = "Detect secrets in Vite environment variable definitions"
-    regex       = '''(?i)VITE_(?:API_|SECRET_|PASSWORD_|TOKEN_|KEY_)[A-Z0-9_]*\s*[:=]\s*["']?([a-zA-Z0-9+/=]{16,})["']?'''
-    secretGroup = 1
-    keywords    = [
-        "api_",
-        "key_",
-        "password_",
-        "secret_",
-        "token_",
-        "vite_",
-    ]
-    tags        = [
-        "environment",
-        "frontend",
-        "secrets",
-        "vite",
-    ]
+id = "database-connection-strings"
+description = "Detect database connection strings with embedded credentials"
+regex = '''(?i)(database_url|db_url|connection_string)\s*[:=]\s*["']?([^"'\s]+://[^"'\s]*:[^"'\s]*@[^"'\s]+)["']?'''
+secretGroup = 2
+keywords = [
+  "connection",
+  "database",
+  "db",
+  "url",
+]
+tags = [
+  "connection-string",
+  "credentials",
+  "database",
+]
 
-    [[rules.allowlists]]
-        description = "Allow development and test values"
-        regexTarget = "secret"
-        regexes     = [
-            '''(?i)(development|dev|test|local|localhost|example|demo|placeholder)''',
-            '''^(true|false|1|0|yes|no|enabled|disabled)$''',
-        ]
+[[rules.allowlists]]
+description = "Allow example connection strings in documentation"
+paths = ['''docs/.*\.(md|txt|rst)$''']
+regexTarget = "secret"
+regexes = ['''(?i)(example|localhost|127\.0\.0\.1|test|demo)''']
+
+[[rules]]
+id = "vite-env-secrets"
+description = "Detect secrets in Vite environment variable definitions"
+regex = '''(?i)VITE_(?:API_|SECRET_|PASSWORD_|TOKEN_|KEY_)[A-Z0-9_]*\s*[:=]\s*["']?([a-zA-Z0-9+/=]{16,})["']?'''
+secretGroup = 1
+keywords = [
+  "api_",
+  "key_",
+  "password_",
+  "secret_",
+  "token_",
+  "vite_",
+]
+tags = [
+  "environment",
+  "frontend",
+  "secrets",
+  "vite",
+]
+
+[[rules.allowlists]]
+description = "Allow development and test values"
+regexTarget = "secret"
+regexes = [
+  '''(?i)(development|dev|test|local|localhost|example|demo|placeholder)''',
+  '''^(true|false|1|0|yes|no|enabled|disabled)$''',
+]
 
 # Enhanced AI platform detection rules (v8.28+ features)
 [[rules]]
-    id          = "anthropic-enhanced-detection"
-    description = "Enhanced detection for Anthropic API keys including all variants"
-    regex       = '''\b(sk-ant-(?:api03|admin01)-[a-zA-Z0-9_\-]{93}AA)(?:[\x60'"\s;]|\\[nr]|$)'''
-    keywords    = [
-        "sk-ant-admin01",
-        "sk-ant-api03",
-    ]
-    tags        = [
-        "ai",
-        "anthropic",
-        "api-key",
-    ]
+id = "anthropic-enhanced-detection"
+description = "Enhanced detection for Anthropic API keys including all variants"
+regex = '''\b(sk-ant-(?:api03|admin01)-[a-zA-Z0-9_\-]{93}AA)(?:[\x60'"\s;]|\\[nr]|$)'''
+keywords = [
+  "sk-ant-admin01",
+  "sk-ant-api03",
+]
+tags = [
+  "ai",
+  "anthropic",
+  "api-key",
+]
 
 [[rules]]
-    id          = "perplexity-api-detection"
-    description = "Detect Perplexity AI API keys"
-    regex       = '''\b(pplx-[a-zA-Z0-9]{48})(?:[\x60'"\s;]|\\[nr]|$)'''
-    keywords    = [ "pplx-" ]
-    tags        = [
-        "ai",
-        "api-key",
-        "perplexity",
-    ]
+id = "perplexity-api-detection"
+description = "Detect Perplexity AI API keys"
+regex = '''\b(pplx-[a-zA-Z0-9]{48})(?:[\x60'"\s;]|\\[nr]|$)'''
+keywords = ["pplx-"]
+tags = [
+  "ai",
+  "api-key",
+  "perplexity",
+]
