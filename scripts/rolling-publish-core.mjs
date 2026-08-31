@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import {
     closeSync,
     existsSync,
@@ -1436,40 +1436,60 @@ async function runGitHubApi(
     requestFile
 ) {
     await atomicWriteJson(requestFile, body);
+    /** @type {unknown} */
+    let lastError;
     try {
-        const result = await runCommand(
-            "gh",
-            [
-                "api",
-                `repos/${repository}/${endpoint}`,
-                "--method",
-                "POST",
-                "--input",
-                requestFile,
-                "--header",
-                "Accept: application/vnd.github+json",
-                "--header",
-                "X-GitHub-Api-Version: 2026-03-10",
-            ],
-            {
-                absoluteTimeoutMs: 2 * 60 * 1_000,
-                cwd: context.repoRoot,
-                env: githubCliEnvironment(),
-                maxTailBytes: 16 * 1024 * 1024,
-                mode: "capture",
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+            try {
+                const result = await runCommand(
+                    "gh",
+                    [
+                        "api",
+                        `repos/${repository}/${endpoint}`,
+                        "--method",
+                        "POST",
+                        "--input",
+                        requestFile,
+                        "--header",
+                        "Accept: application/vnd.github+json",
+                        "--header",
+                        "X-GitHub-Api-Version: 2026-03-10",
+                    ],
+                    {
+                        absoluteTimeoutMs: 2 * 60 * 1_000,
+                        cwd: context.repoRoot,
+                        env: githubCliEnvironment(),
+                        maxTailBytes: 16 * 1024 * 1024,
+                        mode: "capture",
+                    }
+                );
+                return /** @type {Record<string, unknown>} */ (
+                    JSON.parse(result.stdout)
+                );
+            } catch (error) {
+                lastError = error;
+                const diagnostic =
+                    error instanceof Error
+                        ? `${error.message}\n${String(Reflect.get(error, "stderr") ?? "")}`
+                        : String(error);
+                if (
+                    attempt >= 3 ||
+                    !/(?:HTTP\s+5\d\d|server error)/iu.test(diagnostic)
+                ) {
+                    break;
+                }
+                await delay(500 * 2 ** attempt + randomInt(0, 251));
             }
-        );
-        return /** @type {Record<string, unknown>} */ (
-            JSON.parse(result.stdout)
-        );
-    } catch (error) {
+        }
         throw new PublicationError(
             `GitHub Git database request failed for ${endpoint}: ${
-                error instanceof Error ? error.message : String(error)
+                lastError instanceof Error
+                    ? lastError.message
+                    : String(lastError)
             }`,
             {
                 category: "network",
-                cause: error,
+                cause: lastError,
                 code: "GITHUB_OBJECT_STAGE_FAILED",
                 exitCode: 5,
                 phase: "stage-final",
