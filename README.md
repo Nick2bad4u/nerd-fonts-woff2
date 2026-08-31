@@ -279,7 +279,7 @@ npx nerd-fonts-woff2 --source-dir ./fonts/originals,./fonts/extras --convert --c
 
 All families from [Nerd Fonts v3.5.1](https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1) are included.
 
-Browse the full list in the [`fonts/woff2/`](./fonts/woff2) directory, or search the [interactive browser](https://nick2bad4u.github.io/nerd-fonts-woff2/).
+Browse the full list in the [`fonts/woff2/`](https://github.com/Nick2bad4u/nerd-fonts-woff2/tree/main/fonts/woff2) directory on the generated `main` distribution branch, or search the [interactive browser](https://nick2bad4u.github.io/nerd-fonts-woff2/).
 
 Popular families by `reserved font name` (see [Reserved Font Name mechanism](https://openfontlicense.org/webfonts-and-reserved-font-names/)).
 
