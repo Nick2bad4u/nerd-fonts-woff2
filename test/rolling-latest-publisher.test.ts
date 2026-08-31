@@ -971,13 +971,8 @@ describe("rolling latest publisher recovery and contracts", () => {
             "fonts:refresh:latest",
         ];
         for (const command of commands) {
-            const argumentsList = [
-                "run",
-                "--",
-                command,
-                "--",
-                "--help",
-            ];
+            // npm 12's PowerShell shim requires the leading separator used in
+            // our Windows docs; the POSIX entry point forwards that separator.
             const result =
                 process.platform === "win32"
                     ? run(
@@ -996,7 +991,7 @@ describe("rolling latest publisher recovery and contracts", () => {
                               `& npm run -- ${command} -- --help; $exitCode = $LASTEXITCODE; exit $exitCode`,
                           ]
                       )
-                    : run("npm", argumentsList);
+                    : run("npm", ["run", command, "--", "--help"]);
 
             expectSuccess(result);
         }
