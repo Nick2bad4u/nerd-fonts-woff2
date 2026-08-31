@@ -1258,6 +1258,23 @@ function delay(milliseconds) {
 }
 
 /**
+ * Build an explicit ref-scoped push that remains valid when the publication
+ * context is a clone created with `--mirror`.
+ *
+ * @param {string} remote
+ * @param {...string} argumentsList
+ */
+function scopedPushArguments(remote, ...argumentsList) {
+    return [
+        "-c",
+        "remote.origin.mirror=false",
+        "push",
+        remote,
+        ...argumentsList,
+    ];
+}
+
+/**
  * @param {GitContext} context
  * @param {readonly string[]} argumentsList
  * @param {{ mode?: "interactive" | "json"; phase: string }} options
@@ -1507,11 +1524,7 @@ export async function publishPublicationPlan(plan, options) {
                 );
                 await runStreamingGit(
                     context,
-                    [
-                        "push",
-                        remote,
-                        `${commitId}:${ref}`,
-                    ],
+                    scopedPushArguments(remote, `${commitId}:${ref}`),
                     {
                         mode: options.mode ?? "interactive",
                         phase: `seed-${String(chunk["number"])}`,
@@ -1559,12 +1572,11 @@ export async function publishPublicationPlan(plan, options) {
             progress("Installing the reviewed orphan snapshot on main.");
             await runStreamingGit(
                 context,
-                [
-                    "push",
+                scopedPushArguments(
                     remote,
                     `${finalCommit}:refs/heads/main`,
-                    `--force-with-lease=refs/heads/main:${expectedMainCommit ?? ""}`,
-                ],
+                    `--force-with-lease=refs/heads/main:${expectedMainCommit ?? ""}`
+                ),
                 { mode: options.mode ?? "interactive", phase: "promote-main" }
             );
             if (
@@ -1664,12 +1676,7 @@ export async function publishPublicationPlan(plan, options) {
             try {
                 await runStreamingGit(
                     context,
-                    [
-                        "push",
-                        remote,
-                        "--delete",
-                        ...seedBranches,
-                    ],
+                    scopedPushArguments(remote, "--delete", ...seedBranches),
                     {
                         mode: options.mode ?? "interactive",
                         phase: "seed-cleanup",

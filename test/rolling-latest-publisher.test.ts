@@ -293,6 +293,9 @@ describe("rolling latest publisher", () => {
                     "origin",
                     String(firstSeed.commitId) + ":" + String(firstSeed.ref),
                 ]);
+                runGitCapture(context, [
+                    "config", "remote.origin.mirror", "true",
+                ]);
                 const first = await publishPublicationPlan(plan, {
                     context,
                     mode: "json",
@@ -340,7 +343,8 @@ describe("rolling latest publisher", () => {
                     input: "competing main\n",
                 });
                 runGitCapture(context, [
-                    "push", "--force", "origin", competitor + ":refs/heads/main",
+                    "-c", "remote.origin.mirror=false", "push", "--force", "origin",
+                    competitor + ":refs/heads/main",
                 ]);
                 let conflict;
                 try {
