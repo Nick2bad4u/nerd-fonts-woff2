@@ -573,6 +573,53 @@ describe("rolling latest publisher", () => {
         });
     });
 
+    it("pushes only source from a mirror-configured migration clone", () => {
+        expect.assertions(4);
+
+        const fixture = createFixtureRepository();
+        const fixtureRoot = nodePath.dirname(fixture.source);
+        const mirror = nodePath.resolve(fixtureRoot, "migration.git");
+        git(fixtureRoot, "clone", "--mirror", fixture.source, mirror);
+        git(
+            fixtureRoot,
+            "--git-dir",
+            mirror,
+            "remote",
+            "set-url",
+            "origin",
+            fixture.remote
+        );
+
+        expect(
+            git(
+                fixtureRoot,
+                "--git-dir",
+                mirror,
+                "config",
+                "--bool",
+                "remote.origin.mirror"
+            )
+        ).toBe("true");
+
+        const result = runInlineModule(
+            `
+                import { pushFilteredSourceBranch } from ${JSON.stringify(migrationUrl)};
+                await pushFilteredSourceBranch(${JSON.stringify(mirror)}, "json");
+            `,
+            fixture.source
+        );
+
+        expectSuccess(result);
+
+        expect(
+            git(fixtureRoot, "--git-dir", fixture.remote, "rev-parse", "source")
+        ).toBe(fixture.sourceCommit);
+
+        expect(
+            git(fixtureRoot, "--git-dir", fixture.remote, "rev-parse", "main")
+        ).toBe(fixture.sourceCommit);
+    });
+
     it("keeps JSON stdout pure for argument failures and documents rolling URLs", () => {
         expect.assertions(9);
 

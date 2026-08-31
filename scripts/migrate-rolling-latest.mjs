@@ -798,6 +798,34 @@ async function runLongCommand(command, argumentsList, options = {}) {
     });
 }
 
+/**
+ * Push only the rewritten source branch from a clone created with `--mirror`.
+ *
+ * A mirror clone persists `remote.origin.mirror=true`; Git otherwise rejects an
+ * explicit refspec as an attempt to combine mirror and scoped push modes.
+ *
+ * @param {string} mirrorRoot
+ * @param {"interactive" | "json"} [mode]
+ */
+export async function pushFilteredSourceBranch(
+    mirrorRoot,
+    mode = "interactive"
+) {
+    await runLongCommand(
+        "git",
+        [
+            "--git-dir",
+            mirrorRoot,
+            "-c",
+            "remote.origin.mirror=false",
+            "push",
+            "origin",
+            "refs/heads/source:refs/heads/source",
+        ],
+        { mode }
+    );
+}
+
 /** @param {string} slug @param {string} branch */
 async function setDefaultBranch(slug, branch) {
     await runCommand(
@@ -1081,17 +1109,7 @@ export async function applyMigrationPlan(plan, options = {}) {
             github
         );
         progress("Publishing the rewritten font-free source branch.");
-        await runLongCommand(
-            "git",
-            [
-                "--git-dir",
-                mirrorRoot,
-                "push",
-                "origin",
-                "refs/heads/source:refs/heads/source",
-            ],
-            { mode }
-        );
+        await pushFilteredSourceBranch(mirrorRoot, mode);
         if (
             resolveRemoteRef(mirrorContext, "origin", "refs/heads/source") !==
             plan["rewrittenSource"]
