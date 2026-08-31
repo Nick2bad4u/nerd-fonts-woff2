@@ -501,6 +501,86 @@ describe("rolling latest publisher", () => {
         expect(output.temporaryRefs).toBe("");
     }, 30_000);
 
+    it("stages the WOFF2 hierarchy through bounded directory trees", () => {
+        expect.assertions(8);
+
+        const result = runInlineModule(
+            `
+                import { stageWoff2TreeHierarchy } from ${JSON.stringify(coreUrl)};
+                const requests = [];
+                const progress = [];
+                const request = async (endpoint, body, requestName) => {
+                    requests.push({ body, endpoint, requestName });
+                    return { sha: requests.length.toString(16).padStart(40, "0") };
+                };
+                const objects = [
+                    { mode: "100644", path: "fonts/woff2/Beta/Beta.woff2", sha: "b".repeat(40) },
+                    { mode: "100644", path: "fonts/woff2/Alpha/Regular.woff2", sha: "a".repeat(40) },
+                    { mode: "100644", path: "fonts/woff2/index.json", sha: "c".repeat(40) },
+                    { mode: "100644", path: "fonts/woff2/Alpha/Bold.woff2", sha: "d".repeat(40) },
+                ];
+                const tree = await stageWoff2TreeHierarchy(objects, {
+                    delayBetweenTreeWritesMs: 0,
+                    onProgress: (message) => progress.push(message),
+                    request,
+                });
+                let duplicateCode = null;
+                try {
+                    await stageWoff2TreeHierarchy([objects[0], objects[0]], {
+                        delayBetweenTreeWritesMs: 0,
+                        request,
+                    });
+                } catch (error) {
+                    duplicateCode = error.code;
+                }
+                process.stdout.write(JSON.stringify({
+                    duplicateCode,
+                    progress,
+                    requests,
+                    tree,
+                }));
+            `,
+            repoRoot
+        );
+
+        expectSuccess(result);
+
+        const output = JSON.parse(result.stdout) as {
+            duplicateCode: string;
+            progress: string[];
+            requests: Array<{
+                body: { tree: Array<{ path: string; type: string }> };
+                endpoint: string;
+                requestName: string;
+            }>;
+            tree: string;
+        };
+
+        expect(output.requests).toHaveLength(3);
+        expect(output.requests.map(({ endpoint }) => endpoint)).toStrictEqual([
+            "git/trees",
+            "git/trees",
+            "git/trees",
+        ]);
+        expect(
+            output.requests
+                .slice(0, 2)
+                .flatMap(({ body }) => body.tree.map(({ path }) => path))
+        ).toStrictEqual([
+            "Bold.woff2",
+            "Regular.woff2",
+            "Beta.woff2",
+        ]);
+        expect(output.requests[2]?.body.tree).toMatchObject([
+            { path: "Alpha", type: "tree" },
+            { path: "Beta", type: "tree" },
+            { path: "index.json", type: "blob" },
+        ]);
+        expect(output.progress).toHaveLength(3);
+        expect(output.tree).toBe("3".padStart(40, "0"));
+        expect(output.duplicateCode).toBe("CATALOG_PATH_CONFLICT");
+    });
+
     it("detects font-bearing source history and accepts a clean orphan replacement", () => {
         expect.assertions(4);
 

@@ -32,11 +32,19 @@ export const DEFAULT_CHUNK_TARGET_BYTES = 1_250_000_000;
 export const MAX_ESTIMATED_PACK_BYTES = 1_500_000_000;
 export const MAX_GITHUB_OBJECT_BYTES = 100_000_000;
 export const DEFAULT_PUSH_DELAY_MS = 10_000;
+export const DEFAULT_GITHUB_TREE_WRITE_DELAY_MS = 1_100;
 
 const GIT_MAX_BUFFER_BYTES = 128 * 1024 * 1024;
 const GIT_PROBE_TIMEOUT_MS = 30_000;
 const LOCK_SCHEMA_VERSION = 1;
 const LOCK_STALE_AFTER_MS = 15 * 60 * 1_000;
+
+/**
+ * @typedef {{
+ *     blobs: Map<string, Record<string, unknown>>;
+ *     directories: Map<string, GitHubTreeNode>;
+ * }} GitHubTreeNode
+ */
 
 function githubCliEnvironment() {
     const environment = { ...process.env };
@@ -1428,13 +1436,7 @@ export async function verifyPublishedSnapshot(
  * @param {Record<string, unknown>} body
  * @param {string} requestFile
  */
-async function runGitHubApi(
-    context,
-    repository,
-    endpoint,
-    body,
-    requestFile
-) {
+async function runGitHubApi(context, repository, endpoint, body, requestFile) {
     await atomicWriteJson(requestFile, body);
     /** @type {unknown} */
     let lastError;
@@ -1501,6 +1503,185 @@ async function runGitHubApi(
 }
 
 /**
+ * Materialize a directory hierarchy through bounded Git tree requests. Large
+ * flat requests have proved unreliable for the real 2,254-file catalog, while
+ * one request per font family keeps payloads small and deterministic.
+ *
+ * @param {Record<string, unknown>[]} objects
+ * @param {{
+ *     delayBetweenTreeWritesMs?: number;
+ *     onProgress?: (message: string) => void;
+ *     request: (
+ *         endpoint: string,
+ *         body: Record<string, unknown>,
+ *         requestName: string
+ *     ) => Promise<Record<string, unknown>>;
+ *     sleep?: (milliseconds: number) => Promise<void>;
+ * }} options
+ */
+export async function stageWoff2TreeHierarchy(objects, options) {
+    /** @returns {GitHubTreeNode} */
+    const createNode = () => ({
+        blobs: new Map(),
+        directories: new Map(),
+    });
+    const root = createNode();
+    const prefix = "fonts/woff2/";
+    for (const object of objects) {
+        const path = String(object["path"]);
+        if (!path.startsWith(prefix)) {
+            throw new PublicationError(
+                `Catalog object is outside fonts/woff2: ${path}`,
+                {
+                    category: "verification",
+                    code: "INVALID_CATALOG_OBJECT_PATH",
+                    exitCode: 7,
+                    phase: "stage-final",
+                }
+            );
+        }
+        const relativePath = path.slice(prefix.length);
+        const parts = relativePath.split("/");
+        if (
+            parts.length === 0 ||
+            parts.some(
+                (part) => part.length === 0 || part === "." || part === ".."
+            )
+        ) {
+            throw new PublicationError(
+                `Catalog object has an invalid portable path: ${path}`,
+                {
+                    category: "verification",
+                    code: "INVALID_CATALOG_OBJECT_PATH",
+                    exitCode: 7,
+                    phase: "stage-final",
+                }
+            );
+        }
+        let node = root;
+        for (const directory of parts.slice(0, -1)) {
+            if (node.blobs.has(directory)) {
+                throw new PublicationError(
+                    `Catalog path conflicts with a file: ${path}`,
+                    {
+                        category: "verification",
+                        code: "CATALOG_PATH_CONFLICT",
+                        exitCode: 7,
+                        phase: "stage-final",
+                    }
+                );
+            }
+            let child = node.directories.get(directory);
+            if (child === undefined) {
+                child = createNode();
+                node.directories.set(directory, child);
+            }
+            node = child;
+        }
+        const name = parts.at(-1);
+        if (
+            name === undefined ||
+            node.directories.has(name) ||
+            node.blobs.has(name)
+        ) {
+            throw new PublicationError(
+                `Catalog contains a duplicate or conflicting path: ${path}`,
+                {
+                    category: "verification",
+                    code: "CATALOG_PATH_CONFLICT",
+                    exitCode: 7,
+                    phase: "stage-final",
+                }
+            );
+        }
+        node.blobs.set(name, {
+            mode: String(object["mode"]),
+            path: name,
+            sha: String(object["sha"]),
+            type: "blob",
+        });
+    }
+
+    const sleep = options.sleep ?? delay;
+    const writeDelay =
+        options.delayBetweenTreeWritesMs ?? DEFAULT_GITHUB_TREE_WRITE_DELAY_MS;
+    const progress = options.onProgress ?? (() => {});
+    let writeCount = 0;
+    let previousWriteAt = 0;
+    /**
+     * @template T
+     *
+     * @param {[string, T][]} entries
+     *
+     * @returns {[string, T][]}
+     */
+    const sortEntries = (entries) =>
+        entries.sort((left, right) =>
+            Buffer.compare(
+                Buffer.from(String(left[0]), "utf8"),
+                Buffer.from(String(right[0]), "utf8")
+            )
+        );
+
+    /**
+     * @param {GitHubTreeNode} node
+     * @param {string} directoryPath
+     */
+    const materialize = async (node, directoryPath) => {
+        /** @type {Record<string, unknown>[]} */
+        const entries = [];
+        for (const [name, child] of sortEntries([
+            ...node.directories.entries(),
+        ])) {
+            const childPath = `${directoryPath}/${name}`;
+            const childSha = await materialize(child, childPath);
+            entries.push({
+                mode: "040000",
+                path: name,
+                sha: childSha,
+                type: "tree",
+            });
+        }
+        for (const [, blob] of sortEntries([...node.blobs.entries()])) {
+            entries.push(blob);
+        }
+        const elapsed = Date.now() - previousWriteAt;
+        if (previousWriteAt > 0 && elapsed < writeDelay) {
+            await sleep(writeDelay - elapsed);
+        }
+        writeCount += 1;
+        progress(
+            `Staging Git tree ${String(writeCount)} for ${directoryPath} (${String(entries.length)} entries).`
+        );
+        const requestName = `github-tree-${createHash("sha256")
+            .update(directoryPath)
+            .digest("hex")
+            .slice(0, 16)}.json`;
+        const response = await options.request(
+            "git/trees",
+            { tree: entries },
+            requestName
+        );
+        previousWriteAt = Date.now();
+        const sha = response["sha"];
+        if (typeof sha !== "string" || !/^[\da-f]{40}$/u.test(sha)) {
+            throw new PublicationError(
+                `GitHub returned an invalid tree SHA for ${directoryPath}.`,
+                {
+                    category: "verification",
+                    code: "INVALID_GITHUB_TREE_RESPONSE",
+                    exitCode: 7,
+                    phase: "stage-final",
+                }
+            );
+        }
+        return sha;
+    };
+
+    return materialize(root, "fonts/woff2");
+}
+
+/**
  * Materialize the reviewed distribution tree and root commit from Git objects
  * already made reachable by `source` and the chunk refs. The temporary final
  * ref lets the subsequent Git push update `main` with an atomic lease without
@@ -1509,15 +1690,31 @@ async function runGitHubApi(
  * @param {Record<string, unknown>} plan
  * @param {GitContext} context
  * @param {string} stateRoot
+ * @param {{
+ *     delayBetweenTreeWritesMs?: number;
+ *     onProgress?: (message: string) => void;
+ *     request?: (
+ *         endpoint: string,
+ *         body: Record<string, unknown>,
+ *         requestName: string
+ *     ) => Promise<Record<string, unknown>>;
+ *     sleep?: (milliseconds: number) => Promise<void>;
+ * }} [options]
  */
-export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
+export async function stageFinalCommitOnGitHub(
+    plan,
+    context,
+    stateRoot,
+    options = {}
+) {
     const repository = String(plan["repository"]);
     const finalCommit = String(plan["finalCommit"]);
     const finalRef = String(plan["finalRef"]);
     const objects = /** @type {Record<string, unknown>[]} */ (
         /** @type {Record<string, unknown>[]} */ (plan["chunks"])
-            .flatMap((chunk) =>
-                /** @type {Record<string, unknown>[]} */ (chunk["objects"])
+            .flatMap(
+                (chunk) =>
+                    /** @type {Record<string, unknown>[]} */ (chunk["objects"])
             )
             .map((entry) => ({
                 mode: String(entry["mode"]),
@@ -1526,15 +1723,54 @@ export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
                 type: "blob",
             }))
     );
-    const treeResponse = await runGitHubApi(
-        context,
-        repository,
+    const request =
+        options.request ??
+        ((endpoint, body, requestName) =>
+            runGitHubApi(
+                context,
+                repository,
+                endpoint,
+                body,
+                resolve(stateRoot, requestName)
+            ));
+    const woff2Tree = await stageWoff2TreeHierarchy(objects, {
+        ...(options.delayBetweenTreeWritesMs === undefined
+            ? {}
+            : {
+                  delayBetweenTreeWritesMs: options.delayBetweenTreeWritesMs,
+              }),
+        ...(options.onProgress === undefined
+            ? {}
+            : { onProgress: options.onProgress }),
+        request,
+        ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
+    });
+    const catalog = /** @type {Record<string, unknown>} */ (plan["catalog"]);
+    if (woff2Tree !== catalog["fontTree"]) {
+        throw new PublicationError(
+            `GitHub created WOFF2 tree ${woff2Tree} instead of the reviewed tree ${String(catalog["fontTree"])}.`,
+            {
+                category: "verification",
+                code: "GITHUB_FONT_TREE_MISMATCH",
+                exitCode: 7,
+                phase: "stage-final",
+            }
+        );
+    }
+    const treeResponse = await request(
         "git/trees",
         {
             base_tree: String(plan["sourceTree"]),
-            tree: objects,
+            tree: [
+                {
+                    mode: "040000",
+                    path: "fonts/woff2",
+                    sha: woff2Tree,
+                    type: "tree",
+                },
+            ],
         },
-        resolve(stateRoot, "github-tree-request.json")
+        "github-distribution-tree-request.json"
     );
     if (treeResponse["sha"] !== plan["distributionTree"]) {
         throw new PublicationError(
@@ -1550,9 +1786,7 @@ export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
     const commitIdentity = /** @type {Record<string, unknown>} */ (
         plan["commitIdentity"]
     );
-    const commitResponse = await runGitHubApi(
-        context,
-        repository,
+    const commitResponse = await request(
         "git/commits",
         {
             author: commitIdentity,
@@ -1561,7 +1795,7 @@ export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
             parents: [],
             tree: String(plan["distributionTree"]),
         },
-        resolve(stateRoot, "github-commit-request.json")
+        "github-commit-request.json"
     );
     if (commitResponse["sha"] !== finalCommit) {
         throw new PublicationError(
@@ -1575,20 +1809,15 @@ export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
         );
     }
     try {
-        await runGitHubApi(
-            context,
-            repository,
+        await request(
             "git/refs",
             { ref: finalRef, sha: finalCommit },
-            resolve(stateRoot, "github-ref-request.json")
+            "github-ref-request.json"
         );
     } catch (error) {
         if (
-            resolveRemoteRef(
-                context,
-                String(plan["remote"]),
-                finalRef
-            ) !== finalCommit
+            resolveRemoteRef(context, String(plan["remote"]), finalRef) !==
+            finalCommit
         ) {
             throw error;
         }
@@ -1608,8 +1837,10 @@ function isMissingRemoteGitObjectError(error) {
         cause instanceof Error
             ? `${cause.message}\n${String(Reflect.get(cause, "stderr") ?? "")}`
             : String(cause);
-    return /(?:HTTP\s+422|unprocessable)/iu.test(diagnostic) &&
-        /(?:object|sha|tree)/iu.test(diagnostic);
+    return (
+        /(?:HTTP\s+422|unprocessable)/iu.test(diagnostic) &&
+        /(?:object|sha|tree)/iu.test(diagnostic)
+    );
 }
 
 /**
@@ -1720,13 +1951,13 @@ export async function publishPublicationPlan(plan, options) {
         );
         const stageFinalCommit =
             options.stageFinalCommit ??
-            (async () => stageFinalCommitOnGitHub(plan, context, stateRoot));
+            (async () =>
+                stageFinalCommitOnGitHub(plan, context, stateRoot, {
+                    onProgress: progress,
+                }));
         const finalRef = String(plan["finalRef"]);
         let finalStagedCommit = resolveRemoteRef(context, remote, finalRef);
-        if (
-            finalStagedCommit !== null &&
-            finalStagedCommit !== finalCommit
-        ) {
+        if (finalStagedCommit !== null && finalStagedCommit !== finalCommit) {
             throw new PublicationError(
                 `Remote final staging ref has unexpected ownership: ${finalRef}`,
                 {
@@ -1756,11 +1987,7 @@ export async function publishPublicationPlan(plan, options) {
                     plan,
                     stateRoot,
                 });
-                finalStagedCommit = resolveRemoteRef(
-                    context,
-                    remote,
-                    finalRef
-                );
+                finalStagedCommit = resolveRemoteRef(context, remote, finalRef);
             } catch (error) {
                 if (!isMissingRemoteGitObjectError(error)) throw error;
                 progress(
@@ -1842,11 +2069,7 @@ export async function publishPublicationPlan(plan, options) {
                     plan,
                     stateRoot,
                 });
-                finalStagedCommit = resolveRemoteRef(
-                    context,
-                    remote,
-                    finalRef
-                );
+                finalStagedCommit = resolveRemoteRef(context, remote, finalRef);
             }
             if (finalStagedCommit !== finalCommit) {
                 throw new PublicationError(
