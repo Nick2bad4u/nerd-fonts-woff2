@@ -23,7 +23,7 @@ concurrency:
 on:
     pull_request:
         branches:
-            - "main"
+            - "source"
             - "master"
             - "develop"
             - "release/*"
@@ -34,7 +34,7 @@ on:
             - "ready_for_review"
     merge_group:
         branches:
-            - "main"
+            - "source"
             - "master"
             - "develop"
             - "release/*"

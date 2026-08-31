@@ -1,5 +1,5 @@
 # Release pipeline for nerd-fonts-woff2.
-# - Assumes WOFF2 assets are committed in-repo (for raw GitHub/jsDelivr usage).
+# - Tags the font-free source branch; the rolling WOFF2 catalog remains on main.
 # - Publishes npm package via trusted publishing (OIDC) when package is not private.
 # yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
 name: "Release"
@@ -28,7 +28,7 @@ on:
             ref:
                 description: "Branch to release from when running manually"
                 required: false
-                default: "main"
+                default: "source"
                 type: "string"
 
 permissions:
@@ -52,7 +52,7 @@ jobs:
                 shell: "bash"
         env:
             NPM_REGISTRY_URL: "https://registry.npmjs.org"
-            DEFAULT_RELEASE_BRANCH: "main"
+            DEFAULT_RELEASE_BRANCH: "source"
         outputs:
             tag: "${{ steps.meta.outputs.tag }}"
             version: "${{ steps.meta.outputs.version }}"
@@ -100,20 +100,6 @@ jobs:
 
             - name: "Install dependencies"
               run: "npm ci --ignore-scripts"
-
-            - name: "Validate committed asset tree"
-              run: |
-                  set -euo pipefail
-                  if [ ! -d "fonts/woff2" ]; then
-                    echo "Expected committed assets under fonts/woff2 for raw GitHub/jsDelivr links." >&2
-                    exit 1
-                  fi
-
-                  count=$(find fonts/woff2 -type f -name '*.woff2' | wc -l | tr -d ' ')
-                  if [ "$count" -eq 0 ]; then
-                    echo "No .woff2 files found in fonts/woff2. Commit assets before releasing." >&2
-                    exit 1
-                  fi
 
             - name: "Validate release input"
               if: "github.event_name == 'workflow_dispatch'"
@@ -247,8 +233,9 @@ jobs:
                     echo "- Package: \`${{ steps.meta.outputs.package_name }}\`"
                     echo "- Package private: \`${{ steps.meta.outputs.package_private }}\`"
                     echo "- npm already published: \`${{ steps.npm_check.outputs.already_published }}\`"
-                    echo "- Assets expected in repo path: \`fonts/woff2/**\`"
+                    echo "- Font catalog: rolling \`main\` snapshot (not frozen by this code tag)"
                     echo ""
-                    echo "Raw GitHub URL pattern:"
-                    echo "\`https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.meta.outputs.tag }}/fonts/woff2/...\`"
+                    echo "Rolling font URL patterns:"
+                    echo "\`https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/fonts/woff2/...\`"
+                    echo "\`https://raw.githubusercontent.com/${{ github.repository }}/main/fonts/woff2/...\`"
                   } >> "$GITHUB_STEP_SUMMARY"

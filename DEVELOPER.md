@@ -1,5 +1,7 @@
 # Developer Guide — nerd-fonts-woff2
 
+> Development and release automation target the default `source` branch. The `main` branch is generated only by the fingerprinted rolling-font publisher and must not receive ordinary commits or pull requests. See [Maintainer font update workflow](./README.md#maintainer-font-update-workflow) for plan/apply, recovery, resume, and URL semantics.
+
 This document covers the build pipeline, conversion tooling, CLI, and release process for maintainers and contributors.
 
 For end-user font usage, see [README.md](./README.md).
@@ -8,8 +10,8 @@ For end-user font usage, see [README.md](./README.md).
 
 ## Requirements
 
-- Node.js `>=22.18.0`
-- npm `>=10`
+- Node.js `>=22.22.3`
+- npm `12.0.2`
 
 ## Install dependencies
 

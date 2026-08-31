@@ -9,9 +9,13 @@ concurrency:
 on:
     push:
         branches:
-            - "main"
+            - "source"
     pull_request:
+        branches:
+            - "source"
     merge_group:
+        branches:
+            - "source"
         types:
             - "checks_requested"
 

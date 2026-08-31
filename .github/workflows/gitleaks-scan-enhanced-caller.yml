@@ -25,10 +25,16 @@ concurrency:
 
 on:
     pull_request:
+        branches:
+            - "source"
     merge_group:
+        branches:
+            - "source"
         types:
             - "checks_requested"
     push:
+        branches:
+            - "source"
     schedule:
         - cron: "12 4 * * *"
     workflow_dispatch:

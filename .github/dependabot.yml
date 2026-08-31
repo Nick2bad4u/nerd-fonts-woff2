@@ -11,7 +11,7 @@ multi-ecosystem-groups:
             timezone: "America/Detroit"
         assignees:
             - "Nick2bad4u"
-        target-branch: "main"
+        target-branch: "source"
         commit-message:
             prefix: "[dependabot][all]"
             prefix-development: "[dependabot][dev][all]"
