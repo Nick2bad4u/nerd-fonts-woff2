@@ -503,6 +503,31 @@ describe("rolling latest publisher", () => {
 });
 
 describe("github distribution tree staging", () => {
+    it("disables mirror mode for every scoped remote push", () => {
+        expect.assertions(2);
+
+        const result = runInlineModule(
+            `
+                import { scopedPushArguments } from ${JSON.stringify(coreUrl)};
+                process.stdout.write(JSON.stringify(
+                    scopedPushArguments("backup", "--delete", "v1.0.1")
+                ));
+            `,
+            repoRoot
+        );
+
+        expectSuccess(result);
+
+        expect(JSON.parse(result.stdout)).toStrictEqual([
+            "-c",
+            "remote.backup.mirror=false",
+            "push",
+            "backup",
+            "--delete",
+            "v1.0.1",
+        ]);
+    });
+
     it("stages the WOFF2 hierarchy through bounded directory trees", () => {
         expect.assertions(9);
 

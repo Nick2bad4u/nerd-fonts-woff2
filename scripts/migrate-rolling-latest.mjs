@@ -18,6 +18,7 @@ import {
     repositorySlugFromRemote,
     resolveRemoteRef,
     runGitCapture,
+    scopedPushArguments,
     serializePublicationError,
     verifyGeneratedCatalog,
 } from "./rolling-publish-core.mjs";
@@ -1295,10 +1296,11 @@ export async function applyMigrationPlan(plan, options = {}) {
                 [
                     "--git-dir",
                     mirrorRoot,
-                    "push",
-                    "origin",
-                    "--delete",
-                    ...existingTags,
+                    ...scopedPushArguments(
+                        "origin",
+                        "--delete",
+                        ...existingTags
+                    ),
                 ],
                 { mode }
             );

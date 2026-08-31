@@ -1300,10 +1300,10 @@ function delay(milliseconds) {
  * @param {string} remote
  * @param {...string} argumentsList
  */
-function scopedPushArguments(remote, ...argumentsList) {
+export function scopedPushArguments(remote, ...argumentsList) {
     return [
         "-c",
-        "remote.origin.mirror=false",
+        `remote.${remote}.mirror=false`,
         "push",
         remote,
         ...argumentsList,
