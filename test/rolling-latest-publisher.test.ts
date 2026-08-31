@@ -574,7 +574,7 @@ describe("rolling latest publisher", () => {
     });
 
     it("keeps JSON stdout pure for argument failures and documents rolling URLs", () => {
-        expect.assertions(8);
+        expect.assertions(9);
 
         const publisher = run(process.execPath, [
             nodePath.resolve(repoRoot, "scripts", "publish-latest-fonts.mjs"),
@@ -610,6 +610,7 @@ describe("rolling latest publisher", () => {
         expect(readme).toContain("approximately 12 hours");
         expect(readme).toContain("best-effort");
         expect(readme).toContain("Raw GitHub");
+        expect(git(repoRoot, "ls-files", "--", "temp")).toBe("");
     });
 
     it("registers all standalone npm 12 command surfaces", () => {
