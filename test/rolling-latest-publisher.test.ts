@@ -311,13 +311,14 @@ describe("rolling latest publisher", () => {
                 const first = await publishPublicationPlan(plan, {
                     context,
                     mode: "json",
+                    preferExistingObjects: false,
                     pushDelayMs: 0,
                     stageFinalCommit,
                     verifyRemote: false,
                 });
                 const installedMain = runGitCapture(context, [
                     "ls-remote", "origin", "refs/heads/main",
-                ]).split(/\s+/u)[0];
+                ]).slice(0, 40);
                 const commitBody = runGitCapture(context, [
                     "cat-file", "commit", String(plan.finalCommit),
                 ]);
@@ -424,6 +425,80 @@ describe("rolling latest publisher", () => {
             phase: "lease",
         });
         expect(output.finalRemote).toBe(output.competitor);
+    }, 30_000);
+
+    it("skips seed upload when the reviewed root is already staged", () => {
+        expect.assertions(4);
+
+        const fixture = createFixtureRepository();
+        const result = runInlineModule(
+            `
+                import {
+                    buildPublicationPlan,
+                    publishPublicationPlan,
+                    runGitCapture,
+                } from ${JSON.stringify(coreUrl)};
+                const context = {
+                    remote: "origin",
+                    repoRoot: ${JSON.stringify(fixture.source)},
+                };
+                const plan = buildPublicationPlan(context, {
+                    chunkTargetBytes: 60,
+                    remoteUrl: "https://github.com/example/rolling-fonts",
+                    repository: "example/rolling-fonts",
+                    sourceCommit: ${JSON.stringify(fixture.sourceCommit)},
+                });
+                const progress = [];
+                const stageFinalCommit = async ({ finalCommit, finalRef }) => {
+                    const remoteContext = {
+                        gitDir: ${JSON.stringify(fixture.remote)},
+                        repoRoot: ${JSON.stringify(fixture.source)},
+                    };
+                    runGitCapture(remoteContext, [
+                        "fetch", ${JSON.stringify(fixture.source)}, finalCommit,
+                    ]);
+                    runGitCapture(remoteContext, [
+                        "update-ref", finalRef, finalCommit,
+                    ]);
+                };
+                const published = await publishPublicationPlan(plan, {
+                    context,
+                    mode: "json",
+                    onProgress: (message) => progress.push(message),
+                    pushDelayMs: 0,
+                    stageFinalCommit,
+                    verifyRemote: false,
+                });
+                const main = runGitCapture(context, [
+                    "ls-remote", "origin", "refs/heads/main",
+                ]).slice(0, 40);
+                const temporaryRefs = runGitCapture(context, [
+                    "ls-remote", "origin", "refs/heads/upload/font-catalog/*",
+                ]);
+                process.stdout.write(JSON.stringify({
+                    main,
+                    progress,
+                    published,
+                    temporaryRefs,
+                }));
+            `,
+            fixture.source
+        );
+
+        expectSuccess(result);
+
+        const output = JSON.parse(result.stdout) as {
+            main: string;
+            progress: string[];
+            published: Record<string, unknown>;
+            temporaryRefs: string;
+        };
+
+        expect(output.main).toBe(output.published["finalCommit"]);
+        expect(output.progress).not.toStrictEqual(
+            expect.arrayContaining([expect.stringMatching(/^Uploading seed /v)])
+        );
+        expect(output.temporaryRefs).toBe("");
     }, 30_000);
 
     it("detects font-bearing source history and accepts a clean orphan replacement", () => {

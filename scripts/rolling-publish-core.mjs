@@ -1575,6 +1575,23 @@ export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
     }
 }
 
+/** @param {unknown} error */
+function isMissingRemoteGitObjectError(error) {
+    if (
+        !(error instanceof PublicationError) ||
+        error.code !== "GITHUB_OBJECT_STAGE_FAILED"
+    ) {
+        return false;
+    }
+    const cause = error.cause;
+    const diagnostic =
+        cause instanceof Error
+            ? `${cause.message}\n${String(Reflect.get(cause, "stderr") ?? "")}`
+            : String(cause);
+    return /(?:HTTP\s+422|unprocessable)/iu.test(diagnostic) &&
+        /(?:object|sha|tree)/iu.test(diagnostic);
+}
+
 /**
  * @param {Record<string, unknown>} plan
  * @param {{
@@ -1584,6 +1601,7 @@ export async function stageFinalCommitOnGitHub(plan, context, stateRoot) {
  *     mode?: "interactive" | "json";
  *     onProgress?: (message: string) => void;
  *     onWarning?: (message: string) => void;
+ *     preferExistingObjects?: boolean;
  *     pushDelayMs?: number;
  *     sleep?: (milliseconds: number) => Promise<void>;
  *     stageFinalCommit?: (details: {
@@ -1680,7 +1698,57 @@ export async function publishPublicationPlan(plan, options) {
         const chunks = /** @type {Record<string, unknown>[]} */ (
             plan["chunks"]
         );
-        if (!mainInstalled) {
+        const stageFinalCommit =
+            options.stageFinalCommit ??
+            (async () => stageFinalCommitOnGitHub(plan, context, stateRoot));
+        const finalRef = String(plan["finalRef"]);
+        let finalStagedCommit = resolveRemoteRef(context, remote, finalRef);
+        if (
+            finalStagedCommit !== null &&
+            finalStagedCommit !== finalCommit
+        ) {
+            throw new PublicationError(
+                `Remote final staging ref has unexpected ownership: ${finalRef}`,
+                {
+                    category: "repository",
+                    code: "FINAL_REF_CONFLICT",
+                    exitCode: 3,
+                    phase: "stage-final",
+                }
+            );
+        }
+        if (finalStagedCommit === finalCommit) {
+            progress("Reviewed root commit is already staged remotely.");
+        }
+        if (
+            !mainInstalled &&
+            finalStagedCommit === null &&
+            (options.preferExistingObjects ?? true)
+        ) {
+            progress(
+                "Checking whether existing remote Git objects can reproduce the reviewed root commit."
+            );
+            try {
+                await stageFinalCommit({
+                    context,
+                    finalCommit,
+                    finalRef,
+                    plan,
+                    stateRoot,
+                });
+                finalStagedCommit = resolveRemoteRef(
+                    context,
+                    remote,
+                    finalRef
+                );
+            } catch (error) {
+                if (!isMissingRemoteGitObjectError(error)) throw error;
+                progress(
+                    "The reviewed tree contains Git objects not yet reachable remotely; seed upload is required."
+                );
+            }
+        }
+        if (!mainInstalled && finalStagedCommit === null) {
             let previousPushAt = 0;
             for (const chunk of chunks) {
                 const ref = String(chunk["ref"]);
@@ -1742,32 +1810,11 @@ export async function publishPublicationPlan(plan, options) {
             }
         }
 
-        const finalRef = String(plan["finalRef"]);
         if (!mainInstalled) {
-            const stagedFinalCommit = resolveRemoteRef(
-                context,
-                remote,
-                finalRef
-            );
-            if (stagedFinalCommit !== null && stagedFinalCommit !== finalCommit) {
-                throw new PublicationError(
-                    `Remote final staging ref has unexpected ownership: ${finalRef}`,
-                    {
-                        category: "repository",
-                        code: "FINAL_REF_CONFLICT",
-                        exitCode: 3,
-                        phase: "stage-final",
-                    }
-                );
-            }
-            if (stagedFinalCommit === null) {
+            if (finalStagedCommit === null) {
                 progress(
                     "Materializing the reviewed root commit from seeded Git objects."
                 );
-                const stageFinalCommit =
-                    options.stageFinalCommit ??
-                    (async () =>
-                        stageFinalCommitOnGitHub(plan, context, stateRoot));
                 await stageFinalCommit({
                     context,
                     finalCommit,
@@ -1775,12 +1822,13 @@ export async function publishPublicationPlan(plan, options) {
                     plan,
                     stateRoot,
                 });
-            } else {
-                progress("Reviewed root commit is already staged remotely.");
+                finalStagedCommit = resolveRemoteRef(
+                    context,
+                    remote,
+                    finalRef
+                );
             }
-            if (
-                resolveRemoteRef(context, remote, finalRef) !== finalCommit
-            ) {
+            if (finalStagedCommit !== finalCommit) {
                 throw new PublicationError(
                     "Remote final staging ref does not match the reviewed root commit.",
                     {
