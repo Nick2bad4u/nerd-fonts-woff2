@@ -145,7 +145,7 @@
         "secretlint-config-nick2bad4u": "^1.1.2",
         "stylelint": "^17.14.1",
         "stylelint-config-nick2bad4u": "^2.2.1",
-        "typescript": "^6.0.3",
+        "typescript": "^7.0.2",
         "typescript-eslint": "^8.68.0",
         "vitest": "^4.1.11",
         "yamllint-config-nick2bad4u": "^1.1.1"
